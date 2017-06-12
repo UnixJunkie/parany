@@ -1,0 +1,2 @@
+# parany
+parallelize anything
