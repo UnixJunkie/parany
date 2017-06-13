@@ -1,0 +1,17 @@
+Name:       Parany
+Version:    0.1
+Authors:    Francois BERENGER
+License:    LGPL
+Synopsis:   Parallelize any computation
+obuild-ver: 1
+
+Library parany
+  oflags:       -warn-error +26 -bin-annot
+  Path:         .
+  modules:      Parany
+
+Executable test
+  oflags:       -warn-error +26 -bin-annot
+  Path:         .
+#  BuildDepends: 
+  MainIs:       test.ml
