@@ -8,10 +8,11 @@ obuild-ver: 1
 Library parany
   oflags:       -warn-error +26 -bin-annot
   Path:         .
+  BuildDepends: unix
   modules:      Parany
 
 Executable test
   oflags:       -warn-error +26 -bin-annot
   Path:         .
-#  BuildDepends: 
+  BuildDepends: unix
   MainIs:       test.ml
