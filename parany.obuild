@@ -8,7 +8,7 @@ obuild-ver: 1
 Library parany
   oflags:       -warn-error +26 -bin-annot
   Path:         .
-  BuildDepends: unix
+  BuildDepends: unix, netcamlbox
   modules:      Parany
 
 Executable test
