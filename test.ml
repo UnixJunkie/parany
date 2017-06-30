@@ -30,7 +30,7 @@ let main () =
     (eprintf "usage: %s <int>\n" Sys.argv.(0);
      exit 1);
   let nprocs = int_of_string Sys.argv.(1) in
-  Parany.run nprocs demux work mux;
+  Parany.run ~csize:1 ~nprocs ~demux ~f:work ~mux;
   for i = 0 to n - 1 do
     Printf.printf "%d\n" results.(i)
   done
