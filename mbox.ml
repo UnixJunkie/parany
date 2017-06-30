@@ -12,13 +12,14 @@ module Readable = struct
   let process_many box f =
     let msg_ids = camlbox_wait box in
     if msg_ids = [] then
-      let () = unlink_camlbox name box in
+      let () = unlink_camlbox (camlbox_addr box) in
       false
     else
       let () =
-        L.iter (fun msg_id ->
+        List.iter (fun msg_id ->
             (* data copy is avoided here *)
             f (camlbox_get box msg_id);
+            (* free the spot ASAP *)
             camlbox_delete box msg_id
           ) msg_ids
       in
@@ -31,13 +32,13 @@ module Writable = struct
   let create name =
     camlbox_sender name
 
-  (* WARNING: may block until enough space in dst box *)
+  (* WARNING: may block until enough space in dst box;
+     serialization is done here *)
   let write box msg =
     camlbox_send box msg
 
-  (* tell the reader no more messages will come from me
-     FBR: may not be the correct way to notify the receiver *)
+  (* tell the reader no more messages will come from me *)
   let end_of_input box =
-    camlbox_wait box
+    camlbox_wake box
 
 end
