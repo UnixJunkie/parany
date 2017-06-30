@@ -1,4 +1,6 @@
 
+open Printf
+
 let n = 1_000_0000
 let inputs = Array.init n (fun i -> i)
 let counter = ref 0
@@ -23,8 +25,10 @@ let mux x =
   incr res_counter
 
 let main () =
-  (* Log.set_output stdout; *)
-  (* Log.set_log_level Log.DEBUG; *)
+  let argc = Array.length Sys.argv in
+  if argc <> 2 then
+    (eprintf "usage: %s <int>\n" Sys.argv.(0);
+     exit 1);
   let nprocs = int_of_string Sys.argv.(1) in
   Parany.run nprocs demux work mux;
   for i = 0 to n - 1 do
