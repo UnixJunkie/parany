@@ -1,0 +1,5 @@
+# where are .ml and .mli files
+S .
+# where are .cmi and .cmt files
+B dist/build/*
+PKG batteries dolog
