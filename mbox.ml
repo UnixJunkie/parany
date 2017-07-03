@@ -26,12 +26,13 @@ module Readable = struct
     unlink_camlbox (camlbox_addr box)
 
   (* process as many messages as possible;
-     WARNING: blocks until there is something to process *)
+     WARNING: will block until there is something to process *)
   let process_many (box: 'a message camlbox) (f: 'a -> unit): unit =
     let msg_ids = camlbox_wait box in
     let end_of_input = ref false in
     List.iter (fun msg_id ->
-        (* data copy is avoided here *)
+        (* data copy because of deserialization is avoided here
+           thanks to netcamlbox *)
         let msg = camlbox_get box msg_id in
         begin match msg with
           | Last_message _ -> end_of_input := true
@@ -42,15 +43,6 @@ module Readable = struct
       ) msg_ids;
     if !end_of_input then
       raise No_more_work
-
-  (* how many messages can we read without blocking *)
-  let count_messages (box: 'a message camlbox): int =
-    camlbox_messages (camlbox_addr box)
-
-  (* Process all available messages. Don't block if none. *)
-  let process_available (box: 'a message camlbox) (f: 'a -> unit): unit =
-    if count_messages box > 0 then
-      process_many box f
 
 end
 
@@ -66,7 +58,7 @@ module Writable = struct
     camlbox_send box msg
 
   (* tell the reader no more messages will come *)
-  let end_of_input  (box: 'a message camlbox_sender): unit =
+  let end_of_input (box: 'a message camlbox_sender): unit =
     camlbox_send box (Last_message 1)
 
   (* how many messages can we send without blocking *)
