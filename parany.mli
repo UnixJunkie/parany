@@ -2,8 +2,8 @@
 exception End_of_input
 
 val run:
-  csize:int ->
+  ?csize:int ->
   nprocs:int ->
   demux:(unit -> 'a) ->
-  f:('a -> 'b) ->
+  work:('a -> 'b) ->
   mux:('b -> unit) -> unit
