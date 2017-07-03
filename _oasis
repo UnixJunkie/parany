@@ -1,0 +1,20 @@
+OASISFormat: 0.4
+Name:        parany
+Version:     1.0.0
+Synopsis:    parallelize any computation
+Authors:     Francois BERENGER
+License:     LGPL-2 with OCaml linking exception
+
+Library parany
+  Path:       .
+  BuildTools: ocamlbuild
+  Modules:    Parany
+  BuildDepends: netcamlbox, unix
+  CompiledObject: best
+
+Executable test
+  Path:       .
+  BuildTools: ocamlbuild
+  MainIs:     test.ml
+  BuildDepends: parany, unix
+  CompiledObject: best
