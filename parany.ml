@@ -17,15 +17,13 @@ let feed_them_all
       List.iter (fun outbox ->
           let can_accept = Outbox.count_free_spots outbox in
           for i = 1 to can_accept do
-            printf "feeder: sending 1 job\n";
             Outbox.write outbox (Mbox.Msg (demux ()));
           done
         ) outboxes
     done
   with End_of_input ->
     (* tell workers to stop *)
-    (printf "feeder: telling the guys to stop\n";
-     List.iter Outbox.end_of_input outboxes)
+    List.iter Outbox.end_of_input outboxes
 
 (* worker process loop *)
 let go_to_work
@@ -35,14 +33,11 @@ let go_to_work
   try
     while true do
       Inbox.process_many inbox
-        (fun x ->
-           (printf "worker: did 1\n";
-            Outbox.write outbox (Mbox.Msg (f x))))
+        (fun x -> Outbox.write outbox (Mbox.Msg (f x)))
     done
   with Mbox.No_more_work ->
     (* tell collector to stop *)
-    (printf "worker: done\n";
-     Outbox.end_of_input outbox)
+    Outbox.end_of_input outbox
 
 let add_to lref x =
   lref := x :: !lref
@@ -84,15 +79,11 @@ let run ?csize:(csize = 1) ~nprocs ~demux ~work ~mux =
         add_to collector_boxes collector_input
       done;
       (* start feeder *)
-      printf "starting feeder\n";
       fork_out (fun () -> feed_them_all csize demux !feeder_boxes);
-      printf "feeder started\n";
       (* start workers *)
-      printf "starting workers\n";
       List.iter (fun (inbox, outbox) ->
           fork_out (fun () -> go_to_work inbox work outbox)
         ) !worker_boxes;
-      printf "workers started\n";
       (* collect results *)
       let nb_workers = ref nprocs in
       while !nb_workers <> 0 do
