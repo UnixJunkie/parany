@@ -20,12 +20,10 @@ let res_counter = ref 0
 let results = Array.make n 0
 
 let mux x =
-  (* Log.info "Test.mux: %d" x; *)
   results.(!res_counter) <- x;
   incr res_counter
 
 let main () =
-  Log.set_log_level Log.INFO;
   let argc = Array.length Sys.argv in
   if argc <> 3 then
     (eprintf "usage: %s nprocs csize\n" Sys.argv.(0);
