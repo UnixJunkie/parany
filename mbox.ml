@@ -2,11 +2,12 @@
 open Netcamlbox
 open Printf
 
-type 'a message = Msg of 'a
-                | Last_message of int (* Tell receiver nothing more will come.
-                                         The int param is just here to make sure
-                                         this value is boxed (so that netcamlbox
-                                         can (de)serialize it properly). *)
+type 'a message =
+  | Msg of 'a
+  | Last_message of int (* Tell receiver nothing more will come.
+                           The int param is just here to make sure
+                           this value is boxed (so that netcamlbox
+                           can (de)serialize it properly). *)
 
 exception No_more_work
 
