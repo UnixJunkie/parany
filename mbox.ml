@@ -9,8 +9,6 @@ type 'a message =
                            this value is boxed (so that netcamlbox
                            can (de)serialize it properly). *)
 
-exception No_more_work
-
 (* An mbox to read from. This module really creates and destroys the mbox. *)
 module Readable = struct
 
@@ -26,23 +24,23 @@ module Readable = struct
     unlink_camlbox (camlbox_addr box)
 
   (* process as many messages as possible;
+     return the number of Last_message that were read in the box
      WARNING: will block until there is something to process *)
-  let process_many (box: 'a message camlbox) (f: 'a -> unit): unit =
+  let process_many (box: 'a message camlbox) (f: 'a -> unit): int =
     let msg_ids = camlbox_wait box in
-    let end_of_input = ref false in
+    let last_msg_count = ref 0 in
     List.iter (fun msg_id ->
         (* data copy because of deserialization is avoided here
            thanks to netcamlbox *)
         let msg = camlbox_get box msg_id in
         begin match msg with
-          | Last_message _ -> end_of_input := true
+          | Last_message _ -> incr last_msg_count
           | Msg x -> f x
         end;
         (* free spot ASAP *)
         camlbox_delete box msg_id
       ) msg_ids;
-    if !end_of_input then
-      raise No_more_work
+    !last_msg_count
 
 end
 
