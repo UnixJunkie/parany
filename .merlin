@@ -2,4 +2,4 @@
 S .
 # where are .cmi and .cmt files
 B dist/build/*
-PKG batteries dolog
+PKG batteries dolog netcamlbox
