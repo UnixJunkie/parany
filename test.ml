@@ -37,14 +37,4 @@ let main () =
     Printf.printf "%d\n" results.(i)
   done
 
-  (* Log.set_log_level Log.INFO; *)
-  (* (\* test we can and write in an mbox *\) *)
-  (* let (input: int list Netcamlbox.camlbox) = Mbox.Readable.create "testmbox" 1 1000 in *)
-  (* let (output: int list Netcamlbox.camlbox_sender) = Mbox.Writable.create "testmbox" in *)
-  (* Mbox.Writable.write output [1;2;3]; *)
-  (* let _ = Mbox.Readable.process_many input (fun l -> *)
-  (*     printf "n: %d\n" (List.length l) *)
-  (*   ) in *)
-  (* () *)
-
 let () = main ()
