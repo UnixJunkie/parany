@@ -3,7 +3,10 @@ open Netcamlbox
 open Printf
 
 type 'a message = Msg of 'a
-                | Last_message (* tell the receiver nothing more will come *)
+                | Last_message of int (* Tell receiver nothing more will come.
+                                         The int param is just here to make sure
+                                         this value is boxed (so that netcamlbox
+                                         can (de)serialize it properly). *)
 
 exception No_more_work
 
@@ -30,7 +33,7 @@ module Readable = struct
         (* data copy is avoided here *)
         let msg = camlbox_get box msg_id in
         begin match msg with
-          | Last_message -> end_of_input := true
+          | Last_message _ -> end_of_input := true
           | Msg x -> f x
         end;
         (* free spot ASAP *)
@@ -63,7 +66,7 @@ module Writable = struct
 
   (* tell the reader no more messages will come *)
   let end_of_input  (box: 'a message camlbox_sender): unit =
-    camlbox_send box Last_message
+    camlbox_send box (Last_message 1)
 
   (* how many messages can we send without blocking *)
   let count_free_spots (box: 'a message camlbox_sender): int =
