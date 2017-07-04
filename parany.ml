@@ -20,15 +20,23 @@ module Pqueue = struct
   let destroy mem_pool_id =
     Netmcore_mempool.unlink_mempool mem_pool_id
 
-  let push queue (x: 'a message): unit =
-    (* FBR: this will throw an exception once full.
-            In that case we should wait 1ms before retrying *)
-    Netmcore_queue.push x queue
+  (* WARNING: blocking in case the queue is full *)
+  let rec push queue (x: 'a message): unit =
+    try Netmcore_queue.push x queue
+    with Netmcore_mempool.Out_of_pool_memory ->
+      (* the queue is full. If there was a smart blocking
+         push operation using a semaphore, that would be cool ... *)
+      (Unix.sleepf 0.001;
+       push queue x)
 
-  (* will wait until the queue is no more empty *)
+  (* WARNING: blocking in case the queue is empty *)
   let rec process_one queue (f: 'a message -> unit): unit =
     try Netmcore_queue.pop_p queue f
-    with Netmcore_queue.Empty -> (Unix.sleepf 0.001; process_one queue f)
+    with Netmcore_queue.Empty ->
+      (* the queue is empty, there should be a blocking *)
+      (* pop_p operation ... *)
+      (Unix.sleepf 0.001;
+       process_one queue f)
 
 end
 
