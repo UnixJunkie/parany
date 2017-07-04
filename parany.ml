@@ -1,56 +1,72 @@
 
-open Netcamlbox
 open Printf
 
-module Inbox = Mbox.Readable
-module Outbox = Mbox.Writable
+type 'a message =
+  | Msg of 'a
+  | Stop of int (* Tell consumer nothing more will come.
+                   The int param is just here to make sure
+                   this value is boxed (so that ocamlnet
+                   can (de)serialize it properly from/to shm). *)
+
+(* queue for parallel processing *)
+module Pqueue = struct
+
+  let create () =
+    let one_GB = 1024 * 1024 * 1024 in
+    let mem_pool_id = Netmcore_mempool.create_mempool one_GB in
+    let queue = Netmcore_queue.create mem_pool_id () in
+    (mem_pool_id, queue)
+
+  let destroy mem_pool_id =
+    Netmcore_mempool.unlink_mempool mem_pool_id
+
+  let push queue (x: 'a message): unit =
+    (* FBR: this will throw an exception once full.
+            In that case we should wait 1ms before retrying *)
+    Netmcore_queue.push x queue
+
+  (* will wait until the queue is no more empty *)
+  let rec process_one queue (f: 'a message -> unit): unit =
+    try Netmcore_queue.pop_p queue f
+    with Netmcore_queue.Empty -> (Unix.sleepf 0.001; process_one queue f)
+
+end
 
 exception End_of_input
 
 (* feeder process main loop *)
-let feed_them_all
-    (csize: int)
-    (demux: unit -> 'a)
-    (outboxes: ('a Mbox.message Netcamlbox.camlbox_sender) list): unit =
+let feed_them_all nprocs demux queue =
   (* let pid = Unix.getpid () in *)
   (* printf "feeder %d: started\n%!" pid; *)
   try
     while true do
-      List.iter (fun outbox ->
-          let can_accept = Outbox.count_free_spots outbox in
-          for i = 1 to can_accept do
-            Outbox.write outbox (Mbox.Msg (demux ()));
-            (* printf "feeder %d: sent one\n%!" pid *)
-          done
-        ) outboxes
+      let x = demux () in
+      Pqueue.push queue (Msg x)
     done
   with End_of_input ->
     (* tell workers to stop *)
-    ((* printf "feeder %d: telling workers to stop\n%!" pid; *)
-      List.iter Outbox.end_of_input outboxes)
+    (* printf "feeder %d: telling workers to stop\n%!" pid; *)
+      for i = 1 to nprocs do
+        Pqueue.push queue (Stop 1)
+      done
 
 (* worker process loop *)
-let go_to_work
-    (inbox: 'a Mbox.message camlbox)
-    (f: 'a -> 'b)
-    (outbox: 'b Mbox.message camlbox_sender): unit =
+let go_to_work jobs_queue work results_queue =
   (* let pid = Unix.getpid () in *)
   (* printf "worker %d: started\n%!" pid; *)
-  let nb_finished = ref 0 in
-  while !nb_finished < 1 do
-    let finished =
-      Inbox.process_many inbox
-        (fun x ->
-           (* printf "worker %d: did one\n%!" pid; *)
-           Outbox.write outbox (Mbox.Msg (f x))) in
-    nb_finished := finished + !nb_finished
+  let finished = ref false in
+  while not !finished do
+    Pqueue.process_one jobs_queue (function
+        | Stop _ -> finished := true
+        | Msg x ->
+          let y = work x in
+          (* printf "worker %d: did one\n%!" pid; *)
+          Pqueue.push results_queue (Msg y)
+      )
   done;
   (* tell collector to stop *)
   (* printf "worker %d: I'm done\n%!" pid; *)
-  Outbox.end_of_input outbox
-
-let add_to lref x =
-  lref := x :: !lref
+  Pqueue.push results_queue (Stop 1)
 
 let fork_out f =
   match Unix.fork () with
@@ -58,8 +74,8 @@ let fork_out f =
   | 0 -> let () = f () in exit 0
   | _pid -> ()
 
-let run ?csize:(csize = 1) ~nprocs ~demux ~work ~mux =
-  if nprocs = 1 then
+let run ~nprocs ~demux ~work ~mux =
+  if nprocs <= 1 then
     (* sequential version *)
     try
       while true do
@@ -67,48 +83,31 @@ let run ?csize:(csize = 1) ~nprocs ~demux ~work ~mux =
       done
     with End_of_input -> ()
   else
-    begin
-      let pid = Unix.getpid () in
-      (* printf "father %d: started\n%!" pid; *)
-      (* parallel version *)
-      assert(nprocs > 1);
-      (* create all boxes *)
-      let feeder_boxes = ref [] in
-      let worker_boxes = ref [] in
-      let out_mbox_name = sprintf "mbox_out_%d" pid in
-      (* FBR: 1024 is max_msg_size_out *)
-      (* the workers' outbox is two times bigger than necessary so that
-         workers should not wait when writing results out *)
-      let collector_inbox = Inbox.create out_mbox_name (2 * csize * nprocs) 1024 in
-      let workers_outbox = Outbox.create out_mbox_name in
-      for i = 1 to nprocs do
-        let in_mbox_name = sprintf "mbox_in_%d_%d" pid i in
-        (* FBR: 1024 is max_msg_size_in *)
-        let worker_input = Inbox.create in_mbox_name csize 1024 in
-        let feeder_output = Outbox.create in_mbox_name in
-        add_to feeder_boxes feeder_output;
-        add_to worker_boxes (worker_input, workers_outbox);
-      done;
-      (* start feeder *)
-      (* printf "father %d: starting feeder\n%!" pid; *)
-      fork_out (fun () -> feed_them_all csize demux !feeder_boxes);
-      (* start workers *)
-      List.iter (fun (inbox, outbox) ->
-          (* printf "father %d: starting a worker\n%!" pid; *)
-          fork_out (fun () -> go_to_work inbox work outbox)
-        ) !worker_boxes;
-      (* collect results *)
-      let nb_finished = ref 0 in
-      while !nb_finished < nprocs do
-        let finished =
-          Inbox.process_many collector_inbox mux
-            (* (fun x -> *)
-            (*    printf "father %d: collecting one\n%!" pid; *)
-            (*    mux x) *)
-        in
-        nb_finished := finished + !nb_finished
-      done;
-      (* delete readable boxes (writable boxes don't need to be) *)
-      List.iter (fun (input, _) -> Inbox.destroy input) !worker_boxes;
-      Inbox.destroy collector_inbox
-    end
+    (* parallel version *)
+    (* let pid = Unix.getpid () in *)
+    (* printf "father %d: started\n%!" pid; *)
+    (* create queues *)
+    let jobs_qid, jobs_queue = Pqueue.create () in
+    let results_qid, results_queue = Pqueue.create () in
+    (* start feeder *)
+    (* printf "father %d: starting feeder\n%!" pid; *)
+    fork_out (fun () -> feed_them_all nprocs demux jobs_queue);
+    (* start workers *)
+    for i = 1 to nprocs do
+      (* printf "father %d: starting a worker\n%!" pid; *)
+      fork_out (fun () -> go_to_work jobs_queue work results_queue)
+    done;
+    (* collect results *)
+    let nb_finished = ref 0 in
+    while !nb_finished < nprocs do
+      Pqueue.process_one results_queue (fun msg ->
+          match msg with
+          | Stop _ -> incr nb_finished
+          | Msg x ->
+            (* printf "father %d: collecting one\n%!" pid; *)
+            mux x
+        )
+    done;
+    (* free resources *)
+    Pqueue.destroy jobs_qid;
+    Pqueue.destroy results_qid
