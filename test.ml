@@ -1,7 +1,7 @@
 
 open Printf
 
-let n = 10_000_000
+let n = 100_000
 let inputs = Array.init n (fun i -> i)
 let counter = ref 0
 
