@@ -10,8 +10,7 @@ Library parany
   Path:            .
   BuildTools:      ocamlbuild
   Modules:         Parany
-  InternalModules: Mbox
-  BuildDepends:    netcamlbox, unix
+  BuildDepends:    unix, netmulticore
   Install:         true
   CompiledObject:  best
 
@@ -19,6 +18,6 @@ Executable test
   Path:           .
   BuildTools:     ocamlbuild
   MainIs:         test.ml
-  BuildDepends:   parany, unix
+  BuildDepends:   unix, parany
   CompiledObject: best
   Install:        false
