@@ -4,17 +4,21 @@ Version:     1.0.0
 Synopsis:    parallelize any computation
 Authors:     Francois BERENGER
 License:     LGPL-2 with OCaml linking exception
+Plugins:     META (0.4)
 
 Library parany
-  Path:       .
-  BuildTools: ocamlbuild
-  Modules:    Parany
-  BuildDepends: netcamlbox, unix
-  CompiledObject: best
+  Path:            .
+  BuildTools:      ocamlbuild
+  Modules:         Parany
+  InternalModules: Mbox
+  BuildDepends:    netcamlbox, unix
+  Install:         true
+  CompiledObject:  best
 
 Executable test
-  Path:       .
-  BuildTools: ocamlbuild
-  MainIs:     test.ml
-  BuildDepends: parany, unix
+  Path:           .
+  BuildTools:     ocamlbuild
+  MainIs:         test.ml
+  BuildDepends:   parany, unix
   CompiledObject: best
+  Install:        false
