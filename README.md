@@ -13,5 +13,3 @@ The processing function is called "work".
 The function gathering the results is called "mux".
 The number of processors running your computation in parallel is called
 "nprocs".
-Jobs can be sent in chunks to workers (parameter chunk size named "csize").
-Adjust chunk size to tune the parallelization performance of your application.
