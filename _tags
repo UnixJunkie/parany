@@ -1,0 +1,26 @@
+# OASIS_START
+# DO NOT EDIT (digest: d4a918b36d6a4360c30a4e4ea2d0efdb)
+# Ignore VCS directories, you can use the same kind of rule outside
+# OASIS_START/STOP if you want to exclude directories that contains
+# useless stuff for the build process
+true: annot, bin_annot
+<**/.svn>: -traverse
+<**/.svn>: not_hygienic
+".bzr": -traverse
+".bzr": not_hygienic
+".hg": -traverse
+".hg": not_hygienic
+".git": -traverse
+".git": not_hygienic
+"_darcs": -traverse
+"_darcs": not_hygienic
+# Library parany
+"parany.cmxs": use_parany
+# Executable test
+<test.{native,byte}>: pkg_netmulticore
+<test.{native,byte}>: pkg_unix
+<test.{native,byte}>: use_parany
+<*.ml{,i,y}>: pkg_netmulticore
+<*.ml{,i,y}>: pkg_unix
+<*.ml{,i,y}>: use_parany
+# OASIS_STOP
