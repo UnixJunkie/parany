@@ -30,13 +30,24 @@ module Pqueue = struct
        push queue x)
 
   (* WARNING: blocking in case the queue is empty *)
-  let rec process_one queue (f: 'a message -> unit): unit =
+  let rec worker_process_one queue (f: 'a message -> unit): unit =
+    (* the worker avoids data copy out of the shared heap: pop_p *)
     try Netmcore_queue.pop_p queue f
     with Netmcore_queue.Empty ->
       (* the queue is empty, there should be a blocking *)
       (* pop_p operation ... *)
       (Unix.sleepf 0.001;
-       process_one queue f)
+       worker_process_one queue f)
+
+  let rec collector_process_one queue (f: 'a message -> unit): unit =
+    (* the collector does data copy out of the shared heap
+       into normal memory; so that end users of the library are safer: pop_c *)
+    try f (Netmcore_queue.pop_c queue)
+    with Netmcore_queue.Empty ->
+      (* the queue is empty, there should be a blocking *)
+      (* pop_c operation ... *)
+      (Unix.sleepf 0.001;
+       collector_process_one queue f)
 
 end
 
@@ -64,7 +75,7 @@ let go_to_work jobs_queue work results_queue =
   (* printf "worker %d: started\n%!" pid; *)
   let finished = ref false in
   while not !finished do
-    Pqueue.process_one jobs_queue (function
+    Pqueue.worker_process_one jobs_queue (function
         | Stop _ -> finished := true
         | Msg x ->
           let y = work x in
@@ -108,7 +119,7 @@ let run ~nprocs ~demux ~work ~mux =
     (* collect results *)
     let nb_finished = ref 0 in
     while !nb_finished < nprocs do
-      Pqueue.process_one results_queue (fun msg ->
+      Pqueue.collector_process_one results_queue (fun msg ->
           match msg with
           | Stop _ -> incr nb_finished
           | Msg x ->
