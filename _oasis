@@ -7,12 +7,12 @@ License:     LGPL-2 with OCaml linking exception
 Plugins:     META (0.4)
 
 Library parany
-  Path:            .
-  BuildTools:      ocamlbuild
-  Modules:         Parany
-  BuildDepends:    unix, netmulticore
-  Install:         true
-  CompiledObject:  best
+  Path:           .
+  BuildTools:     ocamlbuild
+  Modules:        Parany
+  BuildDepends:   unix, netmulticore, posix-semaphore
+  Install:        true
+  CompiledObject: best
 
 Executable test
   Path:           .
