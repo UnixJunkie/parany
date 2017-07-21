@@ -13,6 +13,8 @@ type 'a message =
 (* wrapper for Posix_semaphore *)
 module Sem = struct
 
+  let count = ref 0
+
   open Posix_semaphore
 
   (* FBR: show as t *)
@@ -23,18 +25,20 @@ module Sem = struct
   let constr name sem =
     { name; sem }
 
-  exception Sem_except of Unix.error
+  exception Sem_except of string
 
   let unwrap = function
-    | Result.Error (`EUnix err) -> raise (Sem_except err)
+    | Result.Error (`EUnix err) -> raise (Sem_except (Unix.error_message err))
     | Result.Ok x -> x
 
   (* FBR: show *)
   (* default count is 0 *)
   let create () =
-    let tmp_fn = Filename.temp_file "parany." ".sem" in
-    let sem = unwrap (sem_open tmp_fn Unix.[O_RDWR; O_CREAT] 0o600 0) in
-    constr tmp_fn sem
+    let name = sprintf "/ocaml_libparany_pid_%d_sem_%d" !count (Unix.getpid ()) in
+    incr count;
+    printf "sem_name: %s\n%!" name;
+    let sem = unwrap (sem_open name Unix.[O_RDWR; O_CREAT] 0o600 0) in
+    constr name sem
 
   (* FBR: show *)
   let close x =
@@ -61,6 +65,10 @@ module Sem = struct
 
 end
 
+type ('a, 'b) t = { id: Netmcore.res_id;
+                    q: ('a, unit) Netmcore_queue.squeue;
+                    blocked_pushers: 'b Sem.t }
+
 (* queue for parallel processing *)
 module Pqueue = struct
 
@@ -68,10 +76,12 @@ module Pqueue = struct
     let one_GB = 1024 * 1024 * 1024 in
     let mem_pool_id = Netmcore_mempool.create_mempool one_GB in
     let queue = Netmcore_queue.create mem_pool_id () in
-    (mem_pool_id, queue)
+    { id = mem_pool_id; q = queue; blocked_pushers = Sem.create () }
 
-  let destroy mem_pool_id =
-    Netmcore_mempool.unlink_mempool mem_pool_id
+  let destroy q =
+    Netmcore_mempool.unlink_mempool q.id;
+    (* Sem.close q.blocked_pushers; *) (* makes the program crash ?! *)
+    Sem.unlink q.blocked_pushers
 
   (* WARNING: blocking in case the queue is full *)
   let rec push queue (x: 'a message): unit =
@@ -174,20 +184,20 @@ let run ~nprocs ~demux ~work ~mux =
     (* let pid = Unix.getpid () in *)
     (* printf "father %d: started\n%!" pid; *)
     (* create queues *)
-    let jobs_qid, jobs_queue = Pqueue.create () in
-    let results_qid, results_queue = Pqueue.create () in
+    let jobs_queue = Pqueue.create () in
+    let results_queue = Pqueue.create () in
     (* start feeder *)
     (* printf "father %d: starting feeder\n%!" pid; *)
-    fork_out (fun () -> feed_them_all nprocs demux jobs_queue);
+    fork_out (fun () -> feed_them_all nprocs demux jobs_queue.q);
     (* start workers *)
     for i = 1 to nprocs do
       (* printf "father %d: starting a worker\n%!" pid; *)
-      fork_out (fun () -> go_to_work jobs_queue work results_queue)
+      fork_out (fun () -> go_to_work jobs_queue.q work results_queue.q)
     done;
     (* collect results *)
     let nb_finished = ref 0 in
     while !nb_finished < nprocs do
-      Pqueue.collector_process_one results_queue (fun msg ->
+      Pqueue.collector_process_one results_queue.q (fun msg ->
           match msg with
           | Stop _ -> incr nb_finished
           | Msg x ->
@@ -196,5 +206,5 @@ let run ~nprocs ~demux ~work ~mux =
         )
     done;
     (* free resources *)
-    Pqueue.destroy jobs_qid;
-    Pqueue.destroy results_qid
+    Pqueue.destroy jobs_queue;
+    Pqueue.destroy results_queue
