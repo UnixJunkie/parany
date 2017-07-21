@@ -8,6 +8,59 @@ type 'a message =
                    this value is boxed (so that ocamlnet
                    can (de)serialize it properly from/to shm). *)
 
+(* FBR: maybe make this viewable outside of the module (cf. .mli file) or send it
+        to upstream library *)
+(* wrapper for Posix_semaphore *)
+module Sem = struct
+
+  open Posix_semaphore
+
+  (* FBR: show as t *)
+  type 'a t = { name: string; (* name in filesystem *)
+                sem: 'a semaphore } (* actual semaphore *)
+
+  (* FBR: hide *)
+  let constr name sem =
+    { name; sem }
+
+  exception Sem_except of Unix.error
+
+  let unwrap = function
+    | Result.Error (`EUnix err) -> raise (Sem_except err)
+    | Result.Ok x -> x
+
+  (* FBR: show *)
+  (* default count is 0 *)
+  let create () =
+    let tmp_fn = Filename.temp_file "parany." ".sem" in
+    let sem = unwrap (sem_open tmp_fn Unix.[O_RDWR; O_CREAT] 0o600 0) in
+    constr tmp_fn sem
+
+  (* FBR: show *)
+  let close x =
+    unwrap (sem_close x.sem)
+
+  (* FBR: show *)
+  let unlink x =
+    unwrap (sem_unlink x.name)
+
+  (* FBR: show *)
+  (* add 1 to sem *)
+  let post x =
+    unwrap (sem_post x.sem)
+
+  (* FBR: show *)
+  let wait x =
+    unwrap (sem_wait x.sem)
+
+  (* FBR: show *)
+  let try_wait x =
+    match sem_trywait x.sem with
+    | Result.Error _ -> false (* did not get sem *)
+    | Result.Ok () -> true (* got it *)
+
+end
+
 (* queue for parallel processing *)
 module Pqueue = struct
 
@@ -22,23 +75,38 @@ module Pqueue = struct
 
   (* WARNING: blocking in case the queue is full *)
   let rec push queue (x: 'a message): unit =
-    try Netmcore_queue.push x queue
+    try
+      Netmcore_queue.push x queue
+      (* THEN POST TO SEM OF TOTAL NUMBER OF ELTS *)
     with Netmcore_mempool.Out_of_pool_memory ->
       (* the queue is full. If there was a smart blocking
          push operation using a semaphore, that would be cool ... *)
+      (* INCREMENT SEMAPHORE OF PEOPLE WAITING FOR SOMEONE TO POP *)
+      (* WAIT ON SEMAPHORE OF SOMEONE TO POP *)
       (Unix.sleepf 0.001;
        push queue x)
 
   (* WARNING: blocking in case the queue is empty *)
+        (* FBR: complete rewrite: wait for the sem of #elements *)
+        (*     then pop_p once we get it *)
   let rec worker_process_one queue (f: 'a message -> unit): unit =
-    (* the worker avoids data copy out of the shared heap: pop_p *)
-    try Netmcore_queue.pop_p queue f
+    (* pop_p: avoids data copy out of the shared heap *)
+    try
+      (* TRY WAIT ON THE SEMAPHORE OF NUMBER OF BLOCKED PROCESSES BECAUSE *)
+      (* OF FULL QUEUE *)
+      (* IF COULD GET THE LOCK: POST TO THE SEM TO THE OTHER SEM TO
+         UNLOCK ONE OF THEM *)
+      Netmcore_queue.pop_p queue f
     with Netmcore_queue.Empty ->
+      (* WAIT ON SEM OF TOTAL NUMBER OF ELTS THEN RETRY
+         REMOVE REC FROM THIS FUNCTION: TWO TRIALS ONLY
+      *)
       (* the queue is empty, there should be a blocking *)
       (* pop_p operation ... *)
       (Unix.sleepf 0.001;
        worker_process_one queue f)
 
+  (* FBR: rewrite after worker_process_one was done *)
   let rec collector_process_one queue (f: 'a message -> unit): unit =
     (* the collector does data copy out of the shared heap
        into normal memory; so that end users of the library are safer: pop_c *)
