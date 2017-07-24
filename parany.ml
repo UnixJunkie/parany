@@ -36,7 +36,7 @@ module Sem = struct
   let create () =
     let name = sprintf "/ocaml_libparany_pid_%d_sem_%d" !count (Unix.getpid ()) in
     incr count;
-    printf "sem_name: %s\n%!" name;
+    (* printf "sem_name: %s\n%!" name; *)
     let sem = unwrap (sem_open name Unix.[O_RDWR; O_CREAT] 0o600 0) in
     constr name sem
 
@@ -67,7 +67,8 @@ end
 
 type ('a, 'b) t = { id: Netmcore.res_id;
                     q: ('a, unit) Netmcore_queue.squeue;
-                    blocked_pushers: 'b Sem.t }
+                    blocked_pushers: 'b Sem.t;
+                    nb_elts: 'b Sem.t }
 
 (* queue for parallel processing *)
 module Pqueue = struct
@@ -76,56 +77,50 @@ module Pqueue = struct
     let one_GB = 1024 * 1024 * 1024 in
     let mem_pool_id = Netmcore_mempool.create_mempool one_GB in
     let queue = Netmcore_queue.create mem_pool_id () in
-    { id = mem_pool_id; q = queue; blocked_pushers = Sem.create () }
+    { id = mem_pool_id;
+      q = queue;
+      blocked_pushers = Sem.create ();
+      nb_elts = Sem.create () }
 
   let destroy q =
     Netmcore_mempool.unlink_mempool q.id;
-    (* Sem.close q.blocked_pushers; *) (* makes the program crash ?! *)
-    Sem.unlink q.blocked_pushers
+    (* Sem.close q.blocked_pushers; *) (* makes the program crash !!! *)
+    Sem.unlink q.blocked_pushers;
+    Sem.unlink q.nb_elts
 
-  (* WARNING: blocking in case the queue is full *)
+  (* WARNING: blocking in case queue is full *)
   let rec push queue (x: 'a message): unit =
     try
-      Netmcore_queue.push x queue
-      (* THEN POST TO SEM OF TOTAL NUMBER OF ELTS *)
+      Netmcore_queue.push x queue.q; (* push elt *)
+      Sem.post queue.nb_elts (* incr nb. elt *)
     with Netmcore_mempool.Out_of_pool_memory ->
-      (* the queue is full. If there was a smart blocking
-         push operation using a semaphore, that would be cool ... *)
-      (* INCREMENT SEMAPHORE OF PEOPLE WAITING FOR SOMEONE TO POP *)
-      (* WAIT ON SEMAPHORE OF SOMEONE TO POP *)
-      (Unix.sleepf 0.001;
-       push queue x)
+      (* queue is full *)
+      Sem.wait queue.blocked_pushers;
+      push queue x
 
-  (* WARNING: blocking in case the queue is empty *)
-        (* FBR: complete rewrite: wait for the sem of #elements *)
-        (*     then pop_p once we get it *)
-  let rec worker_process_one queue (f: 'a message -> unit): unit =
-    (* pop_p: avoids data copy out of the shared heap *)
-    try
-      (* TRY WAIT ON THE SEMAPHORE OF NUMBER OF BLOCKED PROCESSES BECAUSE *)
-      (* OF FULL QUEUE *)
-      (* IF COULD GET THE LOCK: POST TO THE SEM TO THE OTHER SEM TO
-         UNLOCK ONE OF THEM *)
-      Netmcore_queue.pop_p queue f
-    with Netmcore_queue.Empty ->
-      (* WAIT ON SEM OF TOTAL NUMBER OF ELTS THEN RETRY
-         REMOVE REC FROM THIS FUNCTION: TWO TRIALS ONLY
-      *)
-      (* the queue is empty, there should be a blocking *)
-      (* pop_p operation ... *)
-      (Unix.sleepf 0.001;
-       worker_process_one queue f)
+  (* WARNING: blocking in case queue is empty *)
+  let worker_process_one queue (f: 'a message -> unit): unit =
+    (* Netmcore_queue.pop_p avoids data copy out of the shared heap *)
+    Sem.wait queue.nb_elts; (* wait until queue is non empty *)
+    if Sem.try_wait queue.blocked_pushers then
+      (* we got the sem; someone is locked waiting for us to pop one elt *)
+      (Netmcore_queue.pop_p queue.q f;
+       Sem.post queue.blocked_pushers)
+    else (* no one is blocked because of full queue *)
+      Netmcore_queue.pop_p queue.q f
 
-  (* FBR: rewrite after worker_process_one was done *)
-  let rec collector_process_one queue (f: 'a message -> unit): unit =
-    (* the collector does data copy out of the shared heap
-       into normal memory; so that end users of the library are safer: pop_c *)
-    try f (Netmcore_queue.pop_c queue)
-    with Netmcore_queue.Empty ->
-      (* the queue is empty, there should be a blocking *)
-      (* pop_c operation ... *)
-      (Unix.sleepf 0.001;
-       collector_process_one queue f)
+  (* WARNING: blocking in case queue is empty *)
+  let collector_process_one queue (f: 'a message -> unit): unit =
+    (* Netmcore_queue.pop_c: the collector does data copy
+       out of the shared heap into normal memory
+       so that end users of the library are safer *)
+    Sem.wait queue.nb_elts; (* wait until queue is non empty *)
+    if Sem.try_wait queue.blocked_pushers then
+      (* we got the sem; someone is locked waiting for us to pop one elt *)
+      (f (Netmcore_queue.pop_c queue.q);
+       Sem.post queue.blocked_pushers)
+    else (* no one is blocked because of full queue *)
+      f (Netmcore_queue.pop_c queue.q)
 
 end
 
@@ -188,16 +183,16 @@ let run ~nprocs ~demux ~work ~mux =
     let results_queue = Pqueue.create () in
     (* start feeder *)
     (* printf "father %d: starting feeder\n%!" pid; *)
-    fork_out (fun () -> feed_them_all nprocs demux jobs_queue.q);
+    fork_out (fun () -> feed_them_all nprocs demux jobs_queue);
     (* start workers *)
     for i = 1 to nprocs do
       (* printf "father %d: starting a worker\n%!" pid; *)
-      fork_out (fun () -> go_to_work jobs_queue.q work results_queue.q)
+      fork_out (fun () -> go_to_work jobs_queue work results_queue)
     done;
     (* collect results *)
     let nb_finished = ref 0 in
     while !nb_finished < nprocs do
-      Pqueue.collector_process_one results_queue.q (fun msg ->
+      Pqueue.collector_process_one results_queue (fun msg ->
           match msg with
           | Stop _ -> incr nb_finished
           | Msg x ->
