@@ -70,10 +70,11 @@ module Pqueue = struct
       blocked_pushers = Sem.create_exn 0;
       nb_elts = Sem.create_exn 0 }
 
-  let destroy_exn q =
+  let destroy q =
     Netmcore_mempool.unlink_mempool q.id;
     (* Sem.close q.blocked_pushers; *) (* makes the program crash !!! *)
     Sem.unlink_exn q.blocked_pushers;
+    (* Sem.close_exn q.nb_elts; *) (* makes the program crash !!! *)
     Sem.unlink_exn q.nb_elts
 
   (* WARNING: blocking in case queue is full *)
@@ -171,6 +172,7 @@ let run ~nprocs ~demux ~work ~mux =
     let results_queue = Pqueue.create () in
     (* start feeder *)
     (* printf "father %d: starting feeder\n%!" pid; *)
+    Gc.compact (); (* like parmap: reclaim memory prior to forking *)
     fork_out (fun () -> feed_them_all nprocs demux jobs_queue);
     (* start workers *)
     for i = 1 to nprocs do
@@ -189,5 +191,5 @@ let run ~nprocs ~demux ~work ~mux =
         )
     done;
     (* free resources *)
-    Pqueue.destroy_exn jobs_queue;
-    Pqueue.destroy_exn results_queue
+    Pqueue.destroy jobs_queue;
+    Pqueue.destroy results_queue
