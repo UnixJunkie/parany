@@ -8,9 +8,10 @@ val run: nprocs:int -> demux:(unit -> 'a) -> work:('a -> 'b) -> mux:('b -> unit)
 module Sem : sig
   exception Sem_except of string
   type 'a t
-  val create_exn: int -> [> `Unnamed] t
-  val destroy_exn: [> `Unnamed] t -> unit
-  val post_exn: [> `Unnamed] t -> unit
-  val wait_exn: [> `Unnamed] t -> unit
-  val try_wait: [> `Unnamed] t -> bool
+  val create_exn: int -> [> `Named] t
+  val close_exn: [> `Named] t -> unit
+  val unlink_exn: [> `Named] t -> unit
+  val post_exn: [> `Named] t -> unit
+  val wait_exn: [> `Named] t -> unit
+  val try_wait: [> `Named] t -> bool
 end

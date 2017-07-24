@@ -8,12 +8,17 @@ type 'a message =
                    this value is boxed (so that ocamlnet
                    can (de)serialize it properly from/to shm). *)
 
-(* unnamed posix semaphore *)
 module Sem = struct
+
+  let count = ref 0
 
   open Posix_semaphore
 
-  type 'a t = 'a semaphore
+  type 'a t = { name: string; (* name in filesystem *)
+                sem: 'a semaphore } (* actual semaphore *)
+
+  let constr name sem =
+    { name; sem }
 
   exception Sem_except of string
 
@@ -21,22 +26,28 @@ module Sem = struct
     | Result.Error (`EUnix err) -> raise (Sem_except (Unix.error_message err))
     | Result.Ok x -> x
 
-  (* value = initial number of tokens *)
   let create_exn value =
-    unwrap (sem_init value)
+    let name = sprintf "/ocaml_libparany_pid_%d_sem_%d" !count (Unix.getpid ()) in
+    incr count;
+    (* printf "sem_name: %s\n%!" name; *)
+    let sem = unwrap (sem_open name Unix.[O_RDWR; O_CREAT] 0o600 value) in
+    constr name sem
 
-  let destroy_exn sem =
-    unwrap (sem_destroy sem)
+  let close_exn x =
+    unwrap (sem_close x.sem)
+
+  let unlink_exn x =
+    unwrap (sem_unlink x.name)
 
   (* add 1 to sem *)
-  let post_exn sem =
-    unwrap (sem_post sem)
+  let post_exn x =
+    unwrap (sem_post x.sem)
 
-  let wait_exn sem =
-    unwrap (sem_wait sem)
+  let wait_exn x =
+    unwrap (sem_wait x.sem)
 
-  let try_wait sem =
-    match sem_trywait sem with
+  let try_wait x =
+    match sem_trywait x.sem with
     | Result.Error _ -> false (* did not get sem *)
     | Result.Ok () -> true (* got it *)
 
@@ -44,8 +55,8 @@ end
 
 type ('a, 'b) t = { id: Netmcore.res_id;
                     q: ('a, unit) Netmcore_queue.squeue;
-                    blocked_pushers: 'b;
-                    nb_elts: 'b}
+                    blocked_pushers: 'b Sem.t;
+                    nb_elts: 'b Sem.t }
 
 (* queue for parallel processing *)
 module Pqueue = struct
@@ -59,10 +70,11 @@ module Pqueue = struct
       blocked_pushers = Sem.create_exn 0;
       nb_elts = Sem.create_exn 0 }
 
-  let destroy q =
+  let destroy_exn q =
     Netmcore_mempool.unlink_mempool q.id;
-    Sem.destroy_exn q.blocked_pushers;
-    Sem.destroy_exn q.nb_elts
+    (* Sem.close q.blocked_pushers; *) (* makes the program crash !!! *)
+    Sem.unlink_exn q.blocked_pushers;
+    Sem.unlink_exn q.nb_elts
 
   (* WARNING: blocking in case queue is full *)
   let rec push queue (x: 'a message): unit =
@@ -177,5 +189,5 @@ let run ~nprocs ~demux ~work ~mux =
         )
     done;
     (* free resources *)
-    Pqueue.destroy jobs_queue;
-    Pqueue.destroy results_queue
+    Pqueue.destroy_exn jobs_queue;
+    Pqueue.destroy_exn results_queue
