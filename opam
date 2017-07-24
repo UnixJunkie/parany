@@ -16,4 +16,5 @@ depends: [
   "ocamlbuild" {build}
   "ocamlnet"
   "base-unix"
+  "posix-semaphore"
 ]
