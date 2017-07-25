@@ -10,7 +10,7 @@ Library parany
   Path:           .
   BuildTools:     ocamlbuild
   Modules:        Parany
-  BuildDepends:   unix, netmulticore, posix-semaphore
+  BuildDepends:   unix, netmulticore, netsys
   Install:        true
   CompiledObject: best
 

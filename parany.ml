@@ -12,51 +12,47 @@ module Sem = struct
 
   let count = ref 0
 
-  open Posix_semaphore
+  open Netsys_posix
 
-  type 'a t = { name: string; (* name in filesystem *)
-                sem: 'a semaphore } (* actual semaphore *)
+  type t = { name: string; (* name in filesystem *)
+             sem: named_semaphore } (* actual semaphore *)
 
   let constr name sem =
     { name; sem }
 
-  exception Sem_except of string
-
-  let unwrap = function
-    | Result.Error (`EUnix err) -> raise (Sem_except (Unix.error_message err))
-    | Result.Ok x -> x
-
-  let create_exn value =
-    let name = sprintf "/ocaml_libparany_pid_%d_sem_%d" !count (Unix.getpid ()) in
+  let create value =
+    let name =
+      sprintf "/ocaml_libparany_pid_%d_sem_%d" !count (Unix.getpid ()) in
     incr count;
     (* printf "sem_name: %s\n%!" name; *)
-    let sem = unwrap (sem_open name Unix.[O_RDWR; O_CREAT] 0o600 value) in
+    let sem = sem_open name [SEM_O_CREAT] 0o600 value in
     constr name sem
 
-  let close_exn x =
-    unwrap (sem_close x.sem)
-
-  let unlink_exn x =
-    unwrap (sem_unlink x.name)
+  let unlink x =
+    sem_unlink x.name
 
   (* add 1 to sem *)
-  let post_exn x =
-    unwrap (sem_post x.sem)
+  let post x =
+    sem_post x.sem
 
-  let wait_exn x =
-    unwrap (sem_wait x.sem)
+  (* blocking wait *)
+  let wait x =
+    sem_wait x.sem SEM_WAIT_BLOCK
 
   let try_wait x =
-    match sem_trywait x.sem with
-    | Result.Error _ -> false (* did not get sem *)
-    | Result.Ok () -> true (* got it *)
+    try
+      sem_wait x.sem SEM_WAIT_NONBLOCK;
+      true (* got sem *)
+    with
+    | Unix.Unix_error (Unix.EAGAIN, _, _) -> false (* did not get sem *)
+    | exn -> raise exn
 
 end
 
-type ('a, 'b) t = { id: Netmcore.res_id;
-                    q: ('a, unit) Netmcore_queue.squeue;
-                    blocked_pushers: 'b Sem.t;
-                    nb_elts: 'b Sem.t }
+type 'a t = { id: Netmcore.res_id;
+              q: ('a, unit) Netmcore_queue.squeue;
+              blocked_pushers: Sem.t;
+              nb_elts: Sem.t }
 
 (* queue for parallel processing *)
 module Pqueue = struct
@@ -67,34 +63,34 @@ module Pqueue = struct
     let queue = Netmcore_queue.create mem_pool_id () in
     { id = mem_pool_id;
       q = queue;
-      blocked_pushers = Sem.create_exn 0;
-      nb_elts = Sem.create_exn 0 }
+      blocked_pushers = Sem.create 0;
+      nb_elts = Sem.create 0 }
 
   let destroy q =
     Netmcore_mempool.unlink_mempool q.id;
     (* Sem.close q.blocked_pushers; *) (* makes the program crash !!! *)
-    Sem.unlink_exn q.blocked_pushers;
-    (* Sem.close_exn q.nb_elts; *) (* makes the program crash !!! *)
-    Sem.unlink_exn q.nb_elts
+    Sem.unlink q.blocked_pushers;
+    (* Sem.close q.nb_elts; *) (* makes the program crash !!! *)
+    Sem.unlink q.nb_elts
 
   (* WARNING: blocking in case queue is full *)
   let rec push queue (x: 'a message): unit =
     try
       Netmcore_queue.push x queue.q; (* push elt *)
-      Sem.post_exn queue.nb_elts (* incr nb. elt *)
+      Sem.post queue.nb_elts (* incr nb. elt *)
     with Netmcore_mempool.Out_of_pool_memory ->
       (* queue is full *)
-      Sem.wait_exn queue.blocked_pushers;
+      Sem.wait queue.blocked_pushers;
       push queue x
 
   (* WARNING: blocking in case queue is empty *)
   let worker_process_one queue (f: 'a message -> unit): unit =
     (* Netmcore_queue.pop_p avoids data copy out of the shared heap *)
-    Sem.wait_exn queue.nb_elts; (* wait until queue is non empty *)
+    Sem.wait queue.nb_elts; (* wait until queue is non empty *)
     if Sem.try_wait queue.blocked_pushers then
       (* we got the sem; someone is locked waiting for us to pop one elt *)
       (Netmcore_queue.pop_p queue.q f;
-       Sem.post_exn queue.blocked_pushers)
+       Sem.post queue.blocked_pushers)
     else (* no one is blocked because of full queue *)
       Netmcore_queue.pop_p queue.q f
 
@@ -103,11 +99,11 @@ module Pqueue = struct
     (* Netmcore_queue.pop_c: the collector does data copy
        out of the shared heap into normal memory
        so that end users of the library are safer *)
-    Sem.wait_exn queue.nb_elts; (* wait until queue is non empty *)
+    Sem.wait queue.nb_elts; (* wait until queue is non empty *)
     if Sem.try_wait queue.blocked_pushers then
       (* we got the sem; someone is locked waiting for us to pop one elt *)
       (f (Netmcore_queue.pop_c queue.q);
-       Sem.post_exn queue.blocked_pushers)
+       Sem.post queue.blocked_pushers)
     else (* no one is blocked because of full queue *)
       f (Netmcore_queue.pop_c queue.q)
 
