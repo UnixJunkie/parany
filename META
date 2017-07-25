@@ -1,8 +1,8 @@
 # OASIS_START
-# DO NOT EDIT (digest: 33c6ce25aa5aa4b00041926f822ec896)
+# DO NOT EDIT (digest: 3873d32c5ef9c33c2eb22cc3b7d6f895)
 version = "1.0.0"
 description = "parallelize any computation"
-requires = "unix netmulticore posix-semaphore"
+requires = "unix netmulticore netsys"
 archive(byte) = "parany.cma"
 archive(byte, plugin) = "parany.cma"
 archive(native) = "parany.cmxa"

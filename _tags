@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 3d083712d9677b788b8e1df8ab5dfdc2)
+# DO NOT EDIT (digest: 2461ad70f31bbb27801017c7ed6799e9)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -18,11 +18,11 @@ true: annot, bin_annot
 "parany.cmxs": use_parany
 # Executable test
 <test.{native,byte}>: pkg_netmulticore
-<test.{native,byte}>: pkg_posix-semaphore
+<test.{native,byte}>: pkg_netsys
 <test.{native,byte}>: pkg_unix
 <test.{native,byte}>: use_parany
 <*.ml{,i,y}>: pkg_netmulticore
-<*.ml{,i,y}>: pkg_posix-semaphore
+<*.ml{,i,y}>: pkg_netsys
 <*.ml{,i,y}>: pkg_unix
 <*.ml{,i,y}>: use_parany
 # OASIS_STOP
