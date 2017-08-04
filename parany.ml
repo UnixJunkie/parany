@@ -1,13 +1,6 @@
 
 open Printf
 
-type 'a message =
-  | Msg of 'a
-  | Stop of int (* Tell consumer nothing more will come.
-                   The int param is just here to make sure
-                   this value is boxed (so that ocamlnet
-                   can (de)serialize it properly from/to shm). *)
-
 module Sem = struct
 
   let count = ref 0
@@ -21,8 +14,7 @@ module Sem = struct
     { name; sem }
 
   let create value =
-    let name =
-      sprintf "/libparany_p%d_s%d" !count (Unix.getpid ()) in
+    let name = sprintf "/libparany_p%d_s%d" !count (Unix.getpid ()) in
     incr count;
     (* printf "sem_name: %s\n%!" name; *)
     let sem = sem_open name [SEM_O_CREAT] 0o600 value in
@@ -74,7 +66,7 @@ module Pqueue = struct
     Sem.unlink q.nb_elts
 
   (* WARNING: blocking in case queue is full *)
-  let rec push queue (x: 'a message): unit =
+  let rec push queue (x: 'a list): unit =
     try
       Netmcore_queue.push x queue.q; (* push elt *)
       Sem.post queue.nb_elts (* incr nb. elt *)
@@ -84,7 +76,7 @@ module Pqueue = struct
       push queue x
 
   (* WARNING: blocking in case queue is empty *)
-  let worker_process_one queue (f: 'a message -> unit): unit =
+  let worker_process_one queue (f: 'a list -> unit): unit =
     (* Netmcore_queue.pop_p avoids data copy out of the shared heap *)
     Sem.wait queue.nb_elts; (* wait until queue is non empty *)
     if Sem.try_wait queue.blocked_pushers then
@@ -95,7 +87,7 @@ module Pqueue = struct
       Netmcore_queue.pop_p queue.q f
 
   (* WARNING: blocking in case queue is empty *)
-  let collector_process_one queue (f: 'a message -> unit): unit =
+  let collector_process_one queue (f: 'a list -> unit): unit =
     (* Netmcore_queue.pop_c: the collector does data copy
        out of the shared heap into normal memory
        so that end users of the library are safer *)
@@ -118,13 +110,13 @@ let feed_them_all nprocs demux queue =
   try
     while true do
       let x = demux () in
-      Pqueue.push queue (Msg x)
+      Pqueue.push queue [x]
     done
   with End_of_input ->
     (* tell workers to stop *)
     (* printf "feeder %d: telling workers to stop\n%!" pid; *)
       for i = 1 to nprocs do
-        Pqueue.push queue (Stop 1)
+        Pqueue.push queue []
       done
 
 (* worker process loop *)
@@ -134,16 +126,17 @@ let go_to_work jobs_queue work results_queue =
   let finished = ref false in
   while not !finished do
     Pqueue.worker_process_one jobs_queue (function
-        | Stop _ -> finished := true
-        | Msg x ->
+        | [] -> finished := true
+        | [x] ->
           let y = work x in
           (* printf "worker %d: did one\n%!" pid; *)
-          Pqueue.push results_queue (Msg y)
+          Pqueue.push results_queue [y]
+        | _ -> failwith "not implemented yet"
       )
   done;
   (* tell collector to stop *)
   (* printf "worker %d: I'm done\n%!" pid; *)
-  Pqueue.push results_queue (Stop 1)
+  Pqueue.push results_queue []
 
 let fork_out f =
   match Unix.fork () with
@@ -180,10 +173,11 @@ let run ~nprocs ~demux ~work ~mux =
     while !nb_finished < nprocs do
       Pqueue.collector_process_one results_queue (fun msg ->
           match msg with
-          | Stop _ -> incr nb_finished
-          | Msg x ->
+          | [] -> incr nb_finished
+          | [x] ->
             (* printf "father %d: collecting one\n%!" pid; *)
             mux x
+          | _ -> failwith "not implemented yet"
         )
     done;
     (* free resources *)
