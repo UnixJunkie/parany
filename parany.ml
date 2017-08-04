@@ -22,7 +22,7 @@ module Sem = struct
 
   let create value =
     let name =
-      sprintf "/libparany_pid_%d_sem_%d" !count (Unix.getpid ()) in
+      sprintf "/libparany_p%d_s%d" !count (Unix.getpid ()) in
     incr count;
     (* printf "sem_name: %s\n%!" name; *)
     let sem = sem_open name [SEM_O_CREAT] 0o600 value in
