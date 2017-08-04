@@ -104,20 +104,26 @@ end
 exception End_of_input
 
 (* feeder process main loop *)
-let feed_them_all nprocs demux queue =
+let feed_them_all csize nprocs demux queue =
   (* let pid = Unix.getpid () in *)
   (* printf "feeder %d: started\n%!" pid; *)
+  let to_send = ref [] in
   try
     while true do
-      let x = demux () in
-      Pqueue.push queue [x]
+      for i = 1 to csize do
+        let x = demux () in
+        to_send := x :: !to_send
+      done;
+      Pqueue.push queue !to_send;
+      to_send := []
     done
   with End_of_input ->
-    (* tell workers to stop *)
-    (* printf "feeder %d: telling workers to stop\n%!" pid; *)
-      for i = 1 to nprocs do
-        Pqueue.push queue []
-      done
+    (if !to_send <> [] then Pqueue.push queue !to_send;
+     (* tell workers to stop *)
+     (* printf "feeder %d: telling workers to stop\n%!" pid; *)
+     for i = 1 to nprocs do
+       Pqueue.push queue []
+     done)
 
 (* worker process loop *)
 let go_to_work jobs_queue work results_queue =
@@ -127,11 +133,10 @@ let go_to_work jobs_queue work results_queue =
   while not !finished do
     Pqueue.worker_process_one jobs_queue (function
         | [] -> finished := true
-        | [x] ->
-          let y = work x in
+        | xs ->
+          let ys = List.rev_map work xs in
           (* printf "worker %d: did one\n%!" pid; *)
-          Pqueue.push results_queue [y]
-        | _ -> failwith "not implemented yet"
+          Pqueue.push results_queue ys
       )
   done;
   (* tell collector to stop *)
@@ -144,7 +149,8 @@ let fork_out f =
   | 0 -> let () = f () in exit 0
   | _pid -> ()
 
-let run ~nprocs ~demux ~work ~mux =
+let run ?csize:(csize = 1) ~nprocs ~demux ~work ~mux =
+  assert(csize >= 1);
   if nprocs <= 1 then
     (* sequential version *)
     try
@@ -162,7 +168,7 @@ let run ~nprocs ~demux ~work ~mux =
     (* start feeder *)
     (* printf "father %d: starting feeder\n%!" pid; *)
     Gc.compact (); (* like parmap: reclaim memory prior to forking *)
-    fork_out (fun () -> feed_them_all nprocs demux jobs_queue);
+    fork_out (fun () -> feed_them_all csize nprocs demux jobs_queue);
     (* start workers *)
     for i = 1 to nprocs do
       (* printf "father %d: starting a worker\n%!" pid; *)
@@ -174,10 +180,9 @@ let run ~nprocs ~demux ~work ~mux =
       Pqueue.collector_process_one results_queue (fun msg ->
           match msg with
           | [] -> incr nb_finished
-          | [x] ->
+          | xs ->
             (* printf "father %d: collecting one\n%!" pid; *)
-            mux x
-          | _ -> failwith "not implemented yet"
+            List.iter mux xs
         )
     done;
     (* free resources *)
