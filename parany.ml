@@ -149,8 +149,7 @@ let fork_out f =
   | 0 -> let () = f () in exit 0
   | _pid -> ()
 
-let run ?csize:(csize = 1) ~nprocs ~demux ~work ~mux =
-  assert(csize >= 1);
+let run ~csize ~nprocs ~demux ~work ~mux =
   if nprocs <= 1 then
     (* sequential version *)
     try
@@ -159,32 +158,35 @@ let run ?csize:(csize = 1) ~nprocs ~demux ~work ~mux =
       done
     with End_of_input -> ()
   else
-    (* parallel version *)
-    (* let pid = Unix.getpid () in *)
-    (* printf "father %d: started\n%!" pid; *)
-    (* create queues *)
-    let jobs_queue = Pqueue.create () in
-    let results_queue = Pqueue.create () in
-    (* start feeder *)
-    (* printf "father %d: starting feeder\n%!" pid; *)
-    Gc.compact (); (* like parmap: reclaim memory prior to forking *)
-    fork_out (fun () -> feed_them_all csize nprocs demux jobs_queue);
-    (* start workers *)
-    for i = 1 to nprocs do
-      (* printf "father %d: starting a worker\n%!" pid; *)
-      fork_out (fun () -> go_to_work jobs_queue work results_queue)
-    done;
-    (* collect results *)
-    let nb_finished = ref 0 in
-    while !nb_finished < nprocs do
-      Pqueue.collector_process_one results_queue (fun msg ->
-          match msg with
-          | [] -> incr nb_finished
-          | xs ->
-            (* printf "father %d: collecting one\n%!" pid; *)
-            List.iter mux xs
-        )
-    done;
-    (* free resources *)
-    Pqueue.destroy jobs_queue;
-    Pqueue.destroy results_queue
+    begin
+      assert(csize >= 1);
+      (* parallel version *)
+      (* let pid = Unix.getpid () in *)
+      (* printf "father %d: started\n%!" pid; *)
+      (* create queues *)
+      let jobs_queue = Pqueue.create () in
+      let results_queue = Pqueue.create () in
+      (* start feeder *)
+      (* printf "father %d: starting feeder\n%!" pid; *)
+      Gc.compact (); (* like parmap: reclaim memory prior to forking *)
+      fork_out (fun () -> feed_them_all csize nprocs demux jobs_queue);
+      (* start workers *)
+      for i = 1 to nprocs do
+        (* printf "father %d: starting a worker\n%!" pid; *)
+        fork_out (fun () -> go_to_work jobs_queue work results_queue)
+      done;
+      (* collect results *)
+      let nb_finished = ref 0 in
+      while !nb_finished < nprocs do
+        Pqueue.collector_process_one results_queue (fun msg ->
+            match msg with
+            | [] -> incr nb_finished
+            | xs ->
+              (* printf "father %d: collecting one\n%!" pid; *)
+              List.iter mux xs
+          )
+      done;
+      (* free resources *)
+      Pqueue.destroy jobs_queue;
+      Pqueue.destroy results_queue
+    end

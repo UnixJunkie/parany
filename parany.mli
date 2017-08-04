@@ -3,7 +3,7 @@
 exception End_of_input
 
 val run:
-  ?csize:int ->
+  csize:int ->
   nprocs:int ->
   demux:(unit -> 'a) ->
   work:('a -> 'b) ->
