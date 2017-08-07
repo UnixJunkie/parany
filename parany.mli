@@ -9,6 +9,10 @@ exception End_of_input
     The demux function [f] must throw [Parany.End_of_input]
     once it is done.
     Outputs of function [g] are consumed by function [h].
+    Functions [f] and [g] are run by different unix processes.
+    Function [g] is run by [nprocs] processes at the same time.
+    Only function [mux] is run by the same process that called
+    [Parany.run].
     A [csize] of one should be the default.
     The optimal [csize] depends on your computer, the functions
     you are using and the granularity of your computation.
