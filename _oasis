@@ -10,7 +10,7 @@ Library parany
   Path:           .
   BuildTools:     ocamlbuild
   Modules:        Parany
-  BuildDepends:   unix, netmulticore, netsys
+  BuildDepends:   unix, netmulticore, netsys, parmap
   Install:        true
   CompiledObject: best
 
