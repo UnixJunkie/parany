@@ -160,12 +160,23 @@ let get_n_inputs_or_less n demux =
 
 (* parmap backend; for troubleshooting *)
 let parmap_run ~csize ~nprocs ~demux ~work ~mux =
-  assert(csize >= 1);
-  while true do
-    let l = Parmap.L (get_n_inputs_or_less 10_000 demux) in
-    let res = Parmap.parmap ~ncores:nprocs ~chunksize:csize work l in
-    List.iter mux res
-  done
+  if nprocs <= 1 then
+    (* sequential version *)
+    try
+      while true do
+        mux (work (demux ()))
+      done
+    with End_of_input -> ()
+  else
+    let not_finished = ref true in
+    while !not_finished do
+      let l = get_n_inputs_or_less 10_000 demux in
+      if l = [] then
+        not_finished := false
+      else
+        let res = Parmap.parmap ~ncores:nprocs ~chunksize:csize work (Parmap.L l) in
+        List.iter mux res
+    done
 
 let run ~csize ~nprocs ~demux ~work ~mux =
   if nprocs <= 1 then
