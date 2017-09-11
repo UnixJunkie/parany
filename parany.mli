@@ -24,3 +24,10 @@ val run:
   demux:(unit -> 'a) ->
   work:('a -> 'b) ->
   mux:('b -> unit) -> unit
+
+val parmap_run:
+  csize:int ->
+  nprocs:int ->
+  demux:(unit -> 'a) ->
+  work:('a -> 'b) ->
+  mux:('b -> unit) -> unit

@@ -1,6 +1,8 @@
 
 open Printf
 
+(* let debug = true *)
+
 module Sem = struct
 
   let count = ref 0
@@ -16,7 +18,7 @@ module Sem = struct
   let create value =
     let name = sprintf "/libparany_p%d_s%d" !count (Unix.getpid ()) in
     incr count;
-    (* printf "sem_name: %s\n%!" name; *)
+    (* if debug then printf "sem_name: %s\n%!" name; *)
     let sem = sem_open name [SEM_O_CREAT] 0o600 value in
     constr name sem
 
@@ -72,8 +74,9 @@ module Pqueue = struct
       Sem.post queue.nb_elts (* incr nb. elt *)
     with Netmcore_mempool.Out_of_pool_memory ->
       (* queue is full *)
-      Sem.wait queue.blocked_pushers;
-      push queue x
+      ((* if debug then printf "queue is full\n%!"; *)
+       Sem.wait queue.blocked_pushers;
+       push queue x)
 
   (* WARNING: blocking in case queue is empty *)
   let worker_process_one queue (f: 'a list -> unit): unit =
@@ -105,8 +108,7 @@ exception End_of_input
 
 (* feeder process main loop *)
 let feed_them_all csize nprocs demux queue =
-  (* let pid = Unix.getpid () in *)
-  (* printf "feeder %d: started\n%!" pid; *)
+  (* if debug then printf "feeder %d: started\n%!" (Unix.getpid()); *)
   let to_send = ref [] in
   try
     while true do
@@ -120,27 +122,26 @@ let feed_them_all csize nprocs demux queue =
   with End_of_input ->
     (if !to_send <> [] then Pqueue.push queue !to_send;
      (* tell workers to stop *)
-     (* printf "feeder %d: telling workers to stop\n%!" pid; *)
+     (* if debug then printf "feeder %d: telling workers to stop\n%!" (Unix.getpid()); *)
      for i = 1 to nprocs do
        Pqueue.push queue []
      done)
 
 (* worker process loop *)
 let go_to_work jobs_queue work results_queue =
-  (* let pid = Unix.getpid () in *)
-  (* printf "worker %d: started\n%!" pid; *)
+  (* if debug then printf "worker %d: started\n%!" (Unix.getpid()); *)
   let finished = ref false in
   while not !finished do
     Pqueue.worker_process_one jobs_queue (function
         | [] -> finished := true
         | xs ->
           let ys = List.rev_map work xs in
-          (* printf "worker %d: did one\n%!" pid; *)
+          (* if debug then printf "worker %d: did one\n%!" (Unix.getpid()); *)
           Pqueue.push results_queue ys
       )
   done;
   (* tell collector to stop *)
-  (* printf "worker %d: I'm done\n%!" pid; *)
+  (* if debug then printf "worker %d: I'm done\n%!" (Unix.getpid()); *)
   Pqueue.push results_queue []
 
 let fork_out f =
@@ -148,6 +149,23 @@ let fork_out f =
   | -1 -> failwith "Parany.fork_out: fork failed"
   | 0 -> let () = f () in exit 0
   | _pid -> ()
+
+let get_n_inputs_or_less n demux =
+  let rec loop m acc =
+    if m = 0 then acc
+    else
+      try loop (m - 1) (demux () :: acc)
+      with End_of_input -> acc in
+  loop n []
+
+(* parmap backend; for troubleshooting *)
+let parmap_run ~csize ~nprocs ~demux ~work ~mux =
+  assert(csize >= 1);
+  while true do
+    let l = Parmap.L (get_n_inputs_or_less 10_000 demux) in
+    let res = Parmap.parmap ~ncores:nprocs ~chunksize:csize work l in
+    List.iter mux res
+  done
 
 let run ~csize ~nprocs ~demux ~work ~mux =
   if nprocs <= 1 then
@@ -161,18 +179,17 @@ let run ~csize ~nprocs ~demux ~work ~mux =
     begin
       assert(csize >= 1);
       (* parallel version *)
-      (* let pid = Unix.getpid () in *)
-      (* printf "father %d: started\n%!" pid; *)
+      (* if debug then printf "father %d: started\n%!" (Unix.getpid()); *)
       (* create queues *)
       let jobs_queue = Pqueue.create () in
       let results_queue = Pqueue.create () in
       (* start feeder *)
-      (* printf "father %d: starting feeder\n%!" pid; *)
+      (* if debug then printf "father %d: starting feeder\n%!" (Unix.getpid()); *)
       Gc.compact (); (* like parmap: reclaim memory prior to forking *)
       fork_out (fun () -> feed_them_all csize nprocs demux jobs_queue);
       (* start workers *)
       for i = 1 to nprocs do
-        (* printf "father %d: starting a worker\n%!" pid; *)
+        (* if debug then printf "father %d: starting a worker\n%!" (Unix.getpid()); *)
         fork_out (fun () -> go_to_work jobs_queue work results_queue)
       done;
       (* collect results *)
@@ -182,7 +199,7 @@ let run ~csize ~nprocs ~demux ~work ~mux =
             match msg with
             | [] -> incr nb_finished
             | xs ->
-              (* printf "father %d: collecting one\n%!" pid; *)
+              (* if debug then printf "father %d: collecting one\n%!" (Unix.getpid()); *)
               List.iter mux xs
           )
       done;
