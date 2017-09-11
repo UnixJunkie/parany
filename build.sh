@@ -9,7 +9,7 @@ oasis setup
 
 ocaml setup.ml -configure --prefix `opam config var prefix`
 ocaml setup.ml -build
-# ocamlfind remove parany
+# ocaml setup.ml -uninstall
 # ocaml setup.ml -install
 
 #./test.native $1 $2
