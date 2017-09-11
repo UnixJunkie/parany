@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# clear old oasis-generated files
+\rm setup.*
+
 oasis setup
 
 ocaml setup.ml -configure
