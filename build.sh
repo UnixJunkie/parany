@@ -1,11 +1,13 @@
 #!/bin/bash
 
+set -e
+
 # clear old oasis-generated files
 \rm setup.*
 
 oasis setup
 
-ocaml setup.ml -configure
+ocaml setup.ml -configure --prefix `opam config var prefix`
 ocaml setup.ml -build
 # ocamlfind remove parany
 # ocaml setup.ml -install
