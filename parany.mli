@@ -2,10 +2,10 @@
 (** The [demux] function must throw [Parany.End_of_input] once it is done. *)
 exception End_of_input
 
-(** [run ~csize:10 ~nprocs:16 ~demux:f ~work:g ~mux:h] will run
+(** [run ~verbose:false ~csize:10 ~nprocs:16 ~demux:f ~work:g ~mux:h] will run
     in parallel on 16 cores the [g] function.
     Inputs to function [g] are produced by function [f]
-    and grouped by 10 (the chunk size).
+    and grouped by 10 (the chunk size [csize]).
     The demux function [f] must throw [Parany.End_of_input]
     once it is done.
     Outputs of function [g] are consumed by function [h].
@@ -17,8 +17,12 @@ exception End_of_input
     The optimal [csize] depends on your computer, the functions
     you are using and the granularity of your computation.
     Elements which are fast to process may benefit from
-    a [csize] greater than one. *)
+    a [csize] greater than one.
+    In order to troubleshoot an application, run parany with [verbose]
+    set to true. This will print messages on stderr when a queue
+    is empty or full. *)
 val run:
+  verbose:bool ->
   csize:int ->
   nprocs:int ->
   demux:(unit -> 'a) ->

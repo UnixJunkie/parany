@@ -1,31 +1,44 @@
 
 open Printf
 
+let debug = ref false
+
 type 'a t = { id: Netmcore.res_id;
+              name: string;
               q: ('a, unit) Netmcore_queue.squeue }
 
 (* queue for parallel processing *)
 module Pqueue = struct
 
-  let create () =
-    let one_GB = 1024 * 1024 * 1024 in
-    let mem_pool_id = Netmcore_mempool.create_mempool one_GB in
+  let create name =
+    let size = 1024 * 1024 * 1024 in
+    let mem_pool_id = Netmcore_mempool.create_mempool size in
     let queue = Netmcore_queue.create mem_pool_id () in
     { id = mem_pool_id;
+      name = name;
       q = queue }
 
   let destroy q =
     Netmcore_mempool.unlink_mempool q.id
 
-  (* WARNING: blocking in case queue is full *)
   let rec push queue (x: 'a list): unit =
     try Netmcore_queue.push x queue.q (* push elt *)
     with Netmcore_mempool.Out_of_pool_memory ->
-      (* queue is full *)
       begin
-        eprintf "warn: Pqueue.push: full\n%!";
-        Unix.sleepf 0.001;
-        push queue x
+        (* queue is full *)
+        let current_size = Netmcore_queue.length queue.q in
+        if !debug then
+          eprintf "warn: Pqueue.push: %s: full: %d messages\n%!"
+            queue.name current_size;
+        let half = current_size / 2 in
+        (* apparently, trying to push to a full queue monopolizes the semaphore
+           and prevents clients from popping.
+           So, we wait for the size to decrease by half before
+           trying to push again *)
+        while Netmcore_queue.length queue.q > half do
+          Unix.sleepf 0.001
+        done;
+        push queue x (* try to push again *)
       end
 
   let rec worker_process_one queue (f: 'a list -> unit): unit =
@@ -33,7 +46,9 @@ module Pqueue = struct
     try Netmcore_queue.pop_p queue.q f
     with Netmcore_queue.Empty ->
       begin
-        eprintf "warn: Pqueue.worker_process_one: empty\n%!";
+        if !debug then
+          eprintf "warn: Pqueue.worker_process_one: empty: %s\n%!"
+            queue.name;
         Unix.sleepf 0.001;
         worker_process_one queue f
       end
@@ -45,7 +60,9 @@ module Pqueue = struct
     try f (Netmcore_queue.pop_c queue.q)
     with Netmcore_queue.Empty ->
       begin
-        eprintf "warn: Pqueue.collector_process_one: empty\n%!";
+        if !debug then
+          eprintf "warn: Pqueue.collector_process_one: empty: %s\n%!"
+            queue.name;
         Unix.sleepf 0.001;
         collector_process_one queue f
       end
@@ -100,7 +117,8 @@ let fork_out f =
   | 0 -> let () = f () in exit 0
   | _pid -> ()
 
-let run ~csize ~nprocs ~demux ~work ~mux =
+let run ~verbose ~csize ~nprocs ~demux ~work ~mux =
+  debug := verbose;
   if nprocs <= 1 then
     (* sequential version *)
     try
@@ -115,8 +133,8 @@ let run ~csize ~nprocs ~demux ~work ~mux =
       (* let pid = Unix.getpid () in *)
       (* printf "father %d: started\n%!" pid; *)
       (* create queues *)
-      let jobs_queue = Pqueue.create () in
-      let results_queue = Pqueue.create () in
+      let jobs_queue = Pqueue.create "jobs_in" in
+      let results_queue = Pqueue.create "results_out" in
       (* start feeder *)
       (* printf "father %d: starting feeder\n%!" pid; *)
       Gc.compact (); (* like parmap: reclaim memory prior to forking *)
