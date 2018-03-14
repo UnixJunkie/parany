@@ -2,6 +2,15 @@
 (** The [demux] function must throw [Parany.End_of_input] once it is done. *)
 exception End_of_input
 
+(** [set_shm_size nb_bytes] set the memory size (in bytes) used by each shared
+    memory region. There are two such regions created during [run].
+    The default size is 1GB. *)
+val set_shm_size: int -> unit
+
+(** [get_shm_size ()] return the current size (in bytes) of one
+    shared memory region. There are two such regions created during [run]. *)
+val get_shm_size: unit -> int
+
 (** [run ~verbose:false ~csize:10 ~nprocs:16 ~demux:f ~work:g ~mux:h] will run
     in parallel on 16 cores the [g] function.
     Inputs to function [g] are produced by function [f]

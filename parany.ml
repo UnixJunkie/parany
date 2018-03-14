@@ -7,12 +7,20 @@ type 'a t = { id: Netmcore.res_id;
               name: string;
               q: ('a, unit) Netmcore_queue.squeue }
 
+(* default size of one queue *)
+let shm_size = ref (1024 * 1024 * 1024)
+
+let set_shm_size new_size =
+  shm_size := new_size
+
+let get_shm_size () =
+  !shm_size
+
 (* queue for parallel processing *)
 module Pqueue = struct
 
   let create name =
-    let size = 1024 * 1024 * 1024 in
-    let mem_pool_id = Netmcore_mempool.create_mempool size in
+    let mem_pool_id = Netmcore_mempool.create_mempool !shm_size in
     let queue = Netmcore_queue.create mem_pool_id () in
     { id = mem_pool_id;
       name = name;
