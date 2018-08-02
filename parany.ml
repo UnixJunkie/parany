@@ -1,5 +1,5 @@
 
-open Printf
+module Pr = Printf
 
 let debug = ref false
 
@@ -36,7 +36,7 @@ module Pqueue = struct
         (* queue is full *)
         let current_size = Netmcore_queue.length queue.q in
         if !debug then
-          eprintf "warn: Pqueue.push: %s: full: %d messages\n%!"
+          Pr.eprintf "warn: Pqueue.push: %s: full: %d messages\n%!"
             queue.name current_size;
         let half = current_size / 2 in
         (* apparently, trying to push to a full queue monopolizes the semaphore
@@ -55,21 +55,19 @@ module Pqueue = struct
     with Netmcore_queue.Empty ->
       begin
         if !debug then
-          eprintf "warn: Pqueue.worker_process_one: empty: %s\n%!"
+          Pr.eprintf "warn: Pqueue.worker_process_one: empty: %s\n%!"
             queue.name;
         Unix.sleepf 0.001;
         worker_process_one queue f
       end
 
   let rec collector_process_one queue (f: 'a list -> unit): unit =
-    (* Netmcore_queue.pop_c: the collector does data copy
-       out of the shared heap into normal memory
-       so that end users of the library are safer *)
-    try f (Netmcore_queue.pop_c queue.q)
+    (* Netmcore_queue.pop_p avoids data copy out of the shared heap *)
+    try Netmcore_queue.pop_p queue.q f
     with Netmcore_queue.Empty ->
       begin
         if !debug then
-          eprintf "warn: Pqueue.collector_process_one: empty: %s\n%!"
+          Pr.eprintf "warn: Pqueue.collector_process_one: empty: %s\n%!"
             queue.name;
         Unix.sleepf 0.001;
         collector_process_one queue f
@@ -94,12 +92,14 @@ let feed_them_all csize nprocs demux queue =
       to_send := []
     done
   with End_of_input ->
-    (if !to_send <> [] then Pqueue.push queue !to_send;
-     (* tell workers to stop *)
-     (* printf "feeder %d: telling workers to stop\n%!" pid; *)
-     for i = 1 to nprocs do
-       Pqueue.push queue []
-     done)
+    begin
+      if !to_send <> [] then Pqueue.push queue !to_send;
+      (* tell workers to stop *)
+      (* printf "feeder %d: telling workers to stop\n%!" pid; *)
+      for i = 1 to nprocs do
+        Pqueue.push queue []
+      done
+    end
 
 (* worker process loop *)
 let go_to_work jobs_queue work results_queue =
