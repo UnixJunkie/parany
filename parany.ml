@@ -3,6 +3,10 @@ module Pr = Printf
 
 let debug = ref false
 
+(* maximum number of values we have currently seen
+   the shared queue being able to hold *)
+let ceiling = ref max_int
+
 type 'a t = { id: Netmcore.res_id;
               name: string;
               q: ('a, unit) Netmcore_queue.squeue }
@@ -30,47 +34,41 @@ module Pqueue = struct
     Netmcore_mempool.unlink_mempool q.id
 
   let rec push queue (x: 'a list): unit =
-    try Netmcore_queue.push x queue.q (* push elt *)
-    with Netmcore_mempool.Out_of_pool_memory ->
-      begin
-        (* queue is full *)
+    let could_push =
+      try (Netmcore_queue.push x queue.q; true) (* push elt *)
+      with Netmcore_mempool.Out_of_pool_memory -> false in
+    if not could_push then
+      begin (* queue is full *)
         let current_size = Netmcore_queue.length queue.q in
         if !debug then
-          Pr.eprintf "warn: Pqueue.push: %s: full: %d messages\n%!"
-            queue.name current_size;
-        let half = current_size / 2 in
+          Pr.eprintf "warn: Pqueue.push: %s: full: %d messages; ceiling: %d\n%!"
+            queue.name current_size !ceiling;
+        ceiling := min current_size !ceiling;
         (* apparently, trying to push to a full queue monopolizes the semaphore
            and prevents clients from popping.
-           So, we wait for the size to decrease by half before
-           trying to push again *)
-        while Netmcore_queue.length queue.q > half do
+           So, we wait for the size to decrease before trying again *)
+        Unix.sleepf 0.001;
+        while Netmcore_queue.length queue.q >= !ceiling do
           Unix.sleepf 0.001
         done;
         push queue x (* try to push again *)
       end
 
-  let rec worker_process_one queue (f: 'a list -> unit): unit =
-    (* Netmcore_queue.pop_p avoids data copy out of the shared heap *)
-    try Netmcore_queue.pop_p queue.q f
-    with Netmcore_queue.Empty ->
+  let rec process_one queue (f: 'a list -> unit): unit =
+    let could_pop =
+      (* Netmcore_queue.pop_p avoids data copy out of the shared heap *)
+      try (Netmcore_queue.pop_p queue.q f; true)
+      with Netmcore_queue.Empty -> false in
+    if not could_pop then
       begin
         if !debug then
-          Pr.eprintf "warn: Pqueue.worker_process_one: empty: %s\n%!"
+          Pr.eprintf "warn: Pqueue.process_one: empty: %s\n%!"
             queue.name;
         Unix.sleepf 0.001;
-        worker_process_one queue f
-      end
-
-  let rec collector_process_one queue (f: 'a list -> unit): unit =
-    (* Netmcore_queue.pop_p avoids data copy out of the shared heap *)
-    try Netmcore_queue.pop_p queue.q f
-    with Netmcore_queue.Empty ->
-      begin
-        if !debug then
-          Pr.eprintf "warn: Pqueue.collector_process_one: empty: %s\n%!"
-            queue.name;
-        Unix.sleepf 0.001;
-        collector_process_one queue f
+        while Netmcore_queue.is_empty queue.q do
+          Unix.sleepf 0.001
+        done;
+        process_one queue f
       end
 
 end
@@ -107,7 +105,7 @@ let go_to_work jobs_queue work results_queue =
   (* printf "worker %d: started\n%!" pid; *)
   let finished = ref false in
   while not !finished do
-    Pqueue.worker_process_one jobs_queue (function
+    Pqueue.process_one jobs_queue (function
         | [] -> finished := true
         | xs ->
           let ys = List.rev_map work xs in
@@ -155,7 +153,7 @@ let run ~verbose ~csize ~nprocs ~demux ~work ~mux =
       (* collect results *)
       let nb_finished = ref 0 in
       while !nb_finished < nprocs do
-        Pqueue.collector_process_one results_queue (fun msg ->
+        Pqueue.process_one results_queue (fun msg ->
             match msg with
             | [] -> incr nb_finished
             | xs ->
