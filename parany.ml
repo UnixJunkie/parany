@@ -3,10 +3,6 @@ module Pr = Printf
 
 let debug = ref false
 
-(* maximum number of values we have currently seen
-   the shared queue being able to hold *)
-let ceiling = ref max_int
-
 type 'a t = { id: Netmcore.res_id;
               name: string;
               q: ('a, unit) Netmcore_queue.squeue }
@@ -41,14 +37,13 @@ module Pqueue = struct
       begin (* queue is full *)
         let current_size = Netmcore_queue.length queue.q in
         if !debug then
-          Pr.eprintf "warn: Pqueue.push: %s: full: %d messages; ceiling: %d\n%!"
-            queue.name current_size !ceiling;
-        ceiling := min current_size !ceiling;
+          Pr.eprintf "warn: Pqueue.push: %s: full: %d messages\n%!"
+            queue.name current_size;
         (* apparently, trying to push to a full queue monopolizes the semaphore
            and prevents clients from popping.
            So, we wait for the size to decrease before trying again *)
         Unix.sleepf 0.001;
-        while Netmcore_queue.length queue.q >= !ceiling do
+        while Netmcore_queue.length queue.q >= current_size do
           Unix.sleepf 0.001
         done;
         push queue x (* try to push again *)
