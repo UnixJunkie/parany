@@ -1,5 +1,16 @@
+
 (library
- (name parany)
- (public_name parany)
- (libraries unix threads netmulticore netsys)
-)
+  (name parany)
+  (public_name parany)
+  (modules parany)
+  (libraries unix threads netmulticore netsys))
+
+(executable
+  (name test)
+  (modules test)
+  (libraries parany unix))
+
+(alias
+  (name runtest)
+  (action
+  (run ./test.exe 16 800)))
