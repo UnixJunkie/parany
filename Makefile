@@ -1,7 +1,10 @@
-.PHONY: build clean edit install uninstall reinstall
+.PHONY: build build-test clean edit install uninstall reinstall test
 
 build:
 	dune build @install -j 16
+
+build-test: build
+	dune build src/test.exe
 
 clean:
 	rm -rf _build
@@ -16,3 +19,6 @@ uninstall:
 	dune uninstall
 
 reinstall: uninstall install
+
+test: build-test
+	./test.sh
