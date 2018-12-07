@@ -77,7 +77,7 @@ let feed_them_all csize nprocs demux queue =
   let to_send = ref [] in
   try
     while true do
-      for i = 1 to csize do
+      for _ = 1 to csize do
         let x = demux () in
         to_send := x :: !to_send
       done;
@@ -89,7 +89,7 @@ let feed_them_all csize nprocs demux queue =
       if !to_send <> [] then Pqueue.push queue !to_send;
       (* tell workers to stop *)
       (* printf "feeder %d: telling workers to stop\n%!" pid; *)
-      for i = 1 to nprocs do
+      for _ = 1 to nprocs do
         Pqueue.push queue []
       done
     end
@@ -141,7 +141,7 @@ let run ~verbose ~csize ~nprocs ~demux ~work ~mux =
       Gc.compact (); (* like parmap: reclaim memory prior to forking *)
       fork_out (fun () -> feed_them_all csize nprocs demux jobs_queue);
       (* start workers *)
-      for i = 1 to nprocs do
+      for _ = 1 to nprocs do
         (* printf "father %d: starting a worker\n%!" pid; *)
         fork_out (fun () -> go_to_work jobs_queue work results_queue)
       done;

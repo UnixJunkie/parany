@@ -1,0 +1,11 @@
+(executable
+ (name test)
+ (libraries parany unix)
+)
+
+(alias
+ (name runtest)
+ (action
+  (run ./test.exe 6 25)
+ )
+)

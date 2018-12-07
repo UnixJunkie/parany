@@ -1,0 +1,5 @@
+(library
+ (name parany)
+ (public_name parany)
+ (libraries unix threads netmulticore netsys)
+)
