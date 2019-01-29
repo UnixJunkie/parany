@@ -41,9 +41,10 @@ module Pqueue = struct
             queue.name current_size;
         (* apparently, trying to push to a full queue monopolizes the semaphore
            and prevents clients from popping.
-           So, we wait for the size to decrease before trying again *)
+           So, we wait for the size to significantly decrease before trying again *)
         Unix.sleepf 0.001;
-        while Netmcore_queue.length queue.q >= current_size do
+        let low_water_mark = (current_size * 10) / 100 in
+        while Netmcore_queue.length queue.q >= low_water_mark do
           Unix.sleepf 0.001
         done;
         push queue x (* try to push again *)
