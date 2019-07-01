@@ -50,7 +50,7 @@ module Pqueue = struct
         push queue x (* try to push again *)
       end
 
-  let rec process_one queue (f: 'a list -> unit): unit =
+  let rec process_one_in_place queue (f: 'a list -> unit): unit =
     let could_pop =
       (* Netmcore_queue.pop_p avoids data copy out of the shared heap *)
       try (Netmcore_queue.pop_p queue.q f; true)
@@ -58,16 +58,44 @@ module Pqueue = struct
     if not could_pop then
       begin
         if !debug then
-          Pr.eprintf "warn: Pqueue.process_one: empty: %s\n%!"
+          Pr.eprintf "warn: Pqueue.process_one_in_place: empty: %s\n%!"
             queue.name;
         Unix.sleepf 0.001;
         while Netmcore_queue.is_empty queue.q do
           Unix.sleepf 0.001
         done;
-        process_one queue f
+        process_one_in_place queue f
+      end
+
+  let rec process_one_copy queue (f: 'a list -> unit): unit =
+    let could_pop =
+      try (f (Netmcore_queue.pop_c queue.q); true)
+      with Netmcore_queue.Empty -> false in
+    if not could_pop then
+      begin
+        if !debug then
+          Pr.eprintf "warn: Pqueue.process_one_copy: empty: %s\n%!"
+            queue.name;
+        Unix.sleepf 0.001;
+        while Netmcore_queue.is_empty queue.q do
+          Unix.sleepf 0.001
+        done;
+        process_one_copy queue f
       end
 
 end
+
+(* should we copy out ot the shm prior to each call to the work function? *)
+let copy_on_work = ref false
+
+(* should we copy out ot the shm prior to each call to the mux function? *)
+let copy_on_mux = ref false
+
+let set_copy_on_work () =
+  copy_on_work := true
+
+let set_copy_on_mux () =
+  copy_on_mux := true
 
 exception End_of_input
 
@@ -100,8 +128,12 @@ let go_to_work jobs_queue work results_queue =
   (* let pid = Unix.getpid () in *)
   (* printf "worker %d: started\n%!" pid; *)
   let finished = ref false in
+  let process_one =
+    if !copy_on_work then Pqueue.process_one_copy
+    else Pqueue.process_one_in_place
+  in
   while not !finished do
-    Pqueue.process_one jobs_queue (function
+    process_one jobs_queue (function
         | [] -> finished := true
         | xs ->
           let ys = List.rev_map work xs in
@@ -148,8 +180,11 @@ let run ~verbose ~csize ~nprocs ~demux ~work ~mux =
       done;
       (* collect results *)
       let nb_finished = ref 0 in
+      let process_one =
+        if !copy_on_mux then Pqueue.process_one_copy
+        else Pqueue.process_one_in_place in
       while !nb_finished < nprocs do
-        Pqueue.process_one results_queue (fun msg ->
+        process_one results_queue (fun msg ->
             match msg with
             | [] -> incr nb_finished
             | xs ->

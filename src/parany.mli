@@ -11,6 +11,14 @@ val set_shm_size: int -> unit
     shared memory region. There are two such regions created during [run]. *)
 val get_shm_size: unit -> int
 
+(** Call [set_copy_on_work ()] to turn ON data copy out of the shared memory
+    prior to each call to the [work] function. Default: OFF. *)
+val set_copy_on_work: unit -> unit
+
+(** Call [set_copy_on_mux ()] to turn ON data copy out of the shared memory
+    prior to each call to the [mux] function. Default: OFF. *)
+val set_copy_on_mux: unit -> unit
+
 (** [run ~verbose:false ~csize:10 ~nprocs:16 ~demux:f ~work:g ~mux:h] will run
     in parallel on 16 cores the [g] function.
     Inputs to function [g] are produced by function [f]
