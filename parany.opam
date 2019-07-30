@@ -32,3 +32,8 @@ is called 'csize'.
 
 Read the corresponding ocamldoc before using.
 """
+#url {
+#  src: "https://github.com/UnixJunkie/parany/archive/vXXX.tar.gz"
+#  checksum: "md5=YYY"
+#  ]
+#}
