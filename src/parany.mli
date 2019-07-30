@@ -11,6 +11,16 @@ val set_shm_size: int -> unit
     shared memory region. There are two such regions created during [run]. *)
 val get_shm_size: unit -> int
 
+(** [enable_core_pinning ()] turn ON pinning worker processes to
+    distinct cores; default is OFF. Must be called before [run].
+    Worker processes are pinned to cores [0..(nprocs-1)].
+    Don't turn this ON on a shared computer with several users, or if you
+    are running several parany-enabled jobs on the same computer. *)
+val enable_core_pinning: unit -> unit
+
+(** [disable_core_pinning ()] turn OFF core pinning. cf. [enable_core_pinning]. *)
+val disable_core_pinning: unit -> unit
+
 (** Call [set_copy_on_work ()] to turn ON data copy out of the shared memory
     prior to each call to the [work] function. Default: OFF. *)
 val set_copy_on_work: unit -> unit

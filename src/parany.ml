@@ -16,6 +16,14 @@ let set_shm_size new_size =
 let get_shm_size () =
   !shm_size
 
+let core_pinning = ref false (* OFF by default, because of multi-users *)
+
+let enable_core_pinning () =
+  core_pinning := true
+
+let disable_core_pinning () =
+  core_pinning := false
+
 (* queue for parallel processing *)
 module Pqueue = struct
 
@@ -41,7 +49,8 @@ module Pqueue = struct
             queue.name current_size;
         (* apparently, trying to push to a full queue monopolizes the semaphore
            and prevents clients from popping.
-           So, we wait for the size to significantly decrease before trying again *)
+           So, we wait for the size to significantly decrease
+           before trying again *)
         Unix.sleepf 0.001;
         let low_water_mark = (current_size * 10) / 100 in
         while Netmcore_queue.length queue.q >= low_water_mark do
@@ -163,6 +172,8 @@ let run ~verbose ~csize ~nprocs ~demux ~work ~mux =
   else
     begin
       assert(csize >= 1);
+      let max_cores = Setcore.numcores () in
+      assert(nprocs <= max_cores);
       (* parallel version *)
       (* let pid = Unix.getpid () in *)
       (* printf "father %d: started\n%!" pid; *)
@@ -174,9 +185,12 @@ let run ~verbose ~csize ~nprocs ~demux ~work ~mux =
       Gc.compact (); (* like parmap: reclaim memory prior to forking *)
       fork_out (fun () -> feed_them_all csize nprocs demux jobs_queue);
       (* start workers *)
-      for _ = 1 to nprocs do
+      for worker_rank = 0 to nprocs - 1 do
         (* printf "father %d: starting a worker\n%!" pid; *)
-        fork_out (fun () -> go_to_work jobs_queue work results_queue)
+        fork_out (fun () ->
+            if !core_pinning then Setcore.setcore worker_rank;
+            go_to_work jobs_queue work results_queue
+          )
       done;
       (* collect results *)
       let nb_finished = ref 0 in

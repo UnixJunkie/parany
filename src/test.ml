@@ -30,6 +30,7 @@ let main () =
      exit 1);
   let nprocs = int_of_string Sys.argv.(1) in
   let csize = int_of_string Sys.argv.(2) in
+  (* Parany.set_core_pinning true; *)
   Parany.run ~verbose:true ~csize ~nprocs ~demux ~work ~mux;
   for i = 0 to n - 1 do
     Printf.printf "%d\n" results.(i)
