@@ -39,7 +39,17 @@ module Pqueue = struct
 
   (* Unix.sleepf, but for all OCaml versions *)
   let unix_sleepf (timeout: float): unit =
-    let _, _, _ = Unix.select [] [] [] timeout in
+    let elapsed = ref 0.0 in
+    while !elapsed < timeout do
+      let start = Unix.gettimeofday () in
+      begin
+        try ignore(Unix.select [] [] [] (timeout -. !elapsed))
+        with Unix.Unix_error(EINTR, _, _) -> ()
+      end;
+      let stop = Unix.gettimeofday () in
+      let dt = stop -. start in
+      elapsed := !elapsed +. dt
+    done;
     ()
 
   let rec push queue (x: 'a list): unit =
