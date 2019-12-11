@@ -10,7 +10,7 @@ depends: [
   "dune" {>= "1.6.0"}
   "base-unix"
   "ocamlnet"
-  "setcore"
+  "cpu"
 ]
 build: [
   ["dune" "build" "-p" name "-j" jobs]

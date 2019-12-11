@@ -3,7 +3,7 @@
   (name parany)
   (public_name parany)
   (modules parany)
-  (libraries unix threads netmulticore netsys setcore))
+  (libraries unix threads netmulticore netsys cpu))
 
 (executable
   (name test)

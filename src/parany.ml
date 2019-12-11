@@ -187,7 +187,7 @@ let run ~verbose ~csize ~nprocs ~demux ~work ~mux =
   else
     begin
       assert(csize >= 1);
-      let max_cores = Setcore.numcores () in
+      let max_cores = Cpu.numcores () in
       assert(nprocs <= max_cores);
       (* parallel version *)
       (* let pid = Unix.getpid () in *)
@@ -203,7 +203,7 @@ let run ~verbose ~csize ~nprocs ~demux ~work ~mux =
       for worker_rank = 0 to nprocs - 1 do
         (* printf "father %d: starting a worker\n%!" pid; *)
         fork_out (fun () ->
-            if !core_pinning then Setcore.setcore worker_rank;
+            if !core_pinning then Cpu.setcore worker_rank;
             go_to_work jobs_queue work results_queue
           )
       done;
