@@ -55,3 +55,19 @@ val run:
   demux:(unit -> 'a) ->
   work:('a -> 'b) ->
   mux:('b -> unit) -> unit
+
+(** Wrapper module for near-compatibility with Parmap *)
+module Parmap: sig
+
+  (** Parallel List.map *)
+  val parmap: ncores:int -> ?csize:int ->
+    ('a -> 'b) -> 'a list -> 'b list
+
+  (** Parallel List.iter *)
+  val pariter: ncores:int -> ?csize:int ->
+    ('a -> unit) -> 'a list -> unit
+
+  (** Parallel List.fold *)
+  val parfold: ncores:int -> ?csize:int ->
+    ('a -> 'b) -> ('c -> 'b -> 'c) -> 'c -> 'a list -> 'c
+end

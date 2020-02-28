@@ -225,3 +225,56 @@ let run ~verbose ~csize ~nprocs ~demux ~work ~mux =
       Pqueue.destroy jobs_queue;
       Pqueue.destroy results_queue
     end
+
+(* Wrapper for near-compatibility with Parmap *)
+module Parmap = struct
+
+  let tail_rec_map f l =
+    List.rev (List.rev_map f l)
+
+  let parmap ~ncores ?(csize = 1) f l =
+    if ncores <= 1 then tail_rec_map f l
+    else
+      let input = ref l in
+      let demux () = match !input with
+        | [] -> raise End_of_input
+        | x :: xs -> (input := xs; x) in
+      let output = ref [] in
+      let mux x =
+        output := x :: !output in
+      (* for safety *)
+      set_copy_on_work ();
+      set_copy_on_mux ();
+      (* parallel work *)
+      run ~verbose:false ~csize ~nprocs:ncores ~demux ~work:f ~mux;
+      !output
+
+  let pariter ~ncores ?(csize = 1) f l =
+    if ncores <= 1 then List.iter f l
+    else
+      let input = ref l in
+      let demux () = match !input with
+        | [] -> raise End_of_input
+        | x :: xs -> (input := xs; x) in
+      (* for safety *)
+      set_copy_on_work ();
+      (* parallel work *)
+      run ~verbose:false ~csize ~nprocs:ncores ~demux ~work:f ~mux:ignore
+
+  let parfold ~ncores ?(csize = 1) f g init l =
+    if ncores <= 1 then List.fold_left g init (tail_rec_map f l)
+    else
+      let input = ref l in
+      let demux () = match !input with
+        | [] -> raise End_of_input
+        | x :: xs -> (input := xs; x) in
+      let output = ref init in
+      let mux x =
+        output := g !output x in
+      (* for safety *)
+      set_copy_on_work ();
+      set_copy_on_mux ();
+      (* parallel work *)
+      run ~verbose:false ~csize ~nprocs:ncores ~demux ~work:f ~mux;
+      !output
+end
