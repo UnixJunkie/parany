@@ -7,8 +7,8 @@
 
 (executables
   (names test send)
-  (modules test send utls)
-  (libraries parany unix sendmsg))
+  (modules test send)
+  (libraries parany unix sendmsg bytearray))
 
 (alias
   (name runtest)
