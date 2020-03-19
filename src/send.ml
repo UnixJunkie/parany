@@ -25,7 +25,7 @@ let send sock str =
 let receive sock buff =
   let count, none = Sendmsg.recv sock buff 0 (Bytes.length buff) in
   assert(none = None);
-  Bytes.sub_string buff 0 count
+  (count, Bytes.sub_string buff 0 count)
 
 let main () =
   let fd_in, fd_out = Unix.(socketpair PF_UNIX SOCK_DGRAM 0) in
@@ -37,9 +37,9 @@ let main () =
   printf "sent: %d\n" sent;
   Unix.close fd_in;
   let buff = Bytes.create 80 in
-  let message = receive fd_out buff in
+  let count, message = receive fd_out buff in
   Unix.close fd_out;
-  printf "received: %s\n" message;
+  printf "received: %d msg: %s\n" count message;
   let message_in: int array = unmarshal_from_file message in
   printf "decoded:";
   A.iter (printf " %d") message_in;
