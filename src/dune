@@ -5,10 +5,10 @@
   (modules parany)
   (libraries unix threads netmulticore netsys cpu))
 
-(executable
-  (name test)
-  (modules test)
-  (libraries parany unix))
+(executables
+  (names test send)
+  (modules test send utls)
+  (libraries parany unix sendmsg))
 
 (alias
   (name runtest)
