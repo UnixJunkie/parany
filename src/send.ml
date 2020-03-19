@@ -1,9 +1,8 @@
 
-module A = Array
-
 open Printf
 
 let unmarshal_from_file fn =
+  (* O_RDWR is required by mmap *)
   let fd = Unix.(openfile fn [O_RDWR] 0) in
   let a =
     Bigarray.array1_of_genarray
@@ -14,6 +13,7 @@ let unmarshal_from_file fn =
   res
 
 let marshal_to_file fn v =
+  (* O_RDWR is required by mmap *)
   let fd = Unix.(openfile fn [O_RDWR; O_CREAT; O_EXCL] 0o600) in
   let s = Marshal.to_string v [Marshal.No_sharing] in
   ignore(Bytearray.mmap_of_string fd s);
@@ -30,7 +30,7 @@ let receive sock buff =
 let main () =
   let fd_in, fd_out = Unix.(socketpair PF_UNIX SOCK_DGRAM 0) in
   let message_fn = "/tmp/parany_shm_file" in
-  let message_out = A.init 10 (fun i -> i) in
+  let message_out = Array.init 10 (fun i -> i) in
   marshal_to_file message_fn message_out;
   printf "created: %s\n" message_fn;
   let sent = send fd_in message_fn in
@@ -42,7 +42,7 @@ let main () =
   printf "received: %d msg: %s\n" count message;
   let message_in: int array = unmarshal_from_file message in
   printf "decoded:";
-  A.iter (printf " %d") message_in;
+  Array.iter (printf " %d") message_in;
   printf "\n"
 
 let () = main ()
