@@ -11,6 +11,8 @@ depends: [
   "base-unix"
   "ocamlnet"
   "cpu"
+  "sendmsg"
+  "bytearray"
 ]
 build: [
   ["dune" "build" "-p" name "-j" jobs]
