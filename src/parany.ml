@@ -7,15 +7,6 @@ type 'a t = { id: Netmcore.res_id;
               name: string;
               q: ('a, unit) Netmcore_queue.squeue }
 
-(* default size of one queue *)
-let shm_size = ref (1024 * 1024 * 1024)
-
-let set_shm_size new_size =
-  shm_size := new_size
-
-let get_shm_size () =
-  !shm_size
-
 let core_pinning = ref false (* OFF by default, because of multi-users *)
 
 let enable_core_pinning () =
@@ -28,7 +19,7 @@ let disable_core_pinning () =
 module Pqueue = struct
 
   let create name =
-    let mem_pool_id = Netmcore_mempool.create_mempool !shm_size in
+    let mem_pool_id = Netmcore_mempool.create_mempool (1024 * 1024) in
     let queue = Netmcore_queue.create mem_pool_id () in
     { id = mem_pool_id;
       name = name;
@@ -59,23 +50,6 @@ module Pqueue = struct
         push queue x (* try to push again *)
       end
 
-  let rec process_one_in_place queue (f: 'a list -> unit): unit =
-    let could_pop =
-      (* Netmcore_queue.pop_p avoids data copy out of the shared heap *)
-      try (Netmcore_queue.pop_p queue.q f; true)
-      with Netmcore_queue.Empty -> false in
-    if not could_pop then
-      begin
-        if !debug then
-          Pr.eprintf "warn: Pqueue.process_one_in_place: empty: %s\n%!"
-            queue.name;
-        Unix.sleepf 0.001;
-        while Netmcore_queue.is_empty queue.q do
-          Unix.sleepf 0.001
-        done;
-        process_one_in_place queue f
-      end
-
   let rec process_one_copy queue (f: 'a list -> unit): unit =
     let could_pop =
       try (f (Netmcore_queue.pop_c queue.q); true)
@@ -93,18 +67,6 @@ module Pqueue = struct
       end
 
 end
-
-(* should we copy out ot the shm prior to each call to the work function? *)
-let copy_on_work = ref false
-
-(* should we copy out ot the shm prior to each call to the mux function? *)
-let copy_on_mux = ref false
-
-let set_copy_on_work () =
-  copy_on_work := true
-
-let set_copy_on_mux () =
-  copy_on_mux := true
 
 exception End_of_input
 
@@ -137,12 +99,8 @@ let go_to_work jobs_queue work results_queue =
   (* let pid = Unix.getpid () in *)
   (* printf "worker %d: started\n%!" pid; *)
   let finished = ref false in
-  let process_one =
-    if !copy_on_work then Pqueue.process_one_copy
-    else Pqueue.process_one_in_place
-  in
   while not !finished do
-    process_one jobs_queue (function
+    Pqueue.process_one_copy jobs_queue (function
         | [] -> finished := true
         | xs ->
           let ys = List.rev_map work xs in
@@ -194,11 +152,8 @@ let run ~verbose ~csize ~nprocs ~demux ~work ~mux =
       done;
       (* collect results *)
       let nb_finished = ref 0 in
-      let process_one =
-        if !copy_on_mux then Pqueue.process_one_copy
-        else Pqueue.process_one_in_place in
       while !nb_finished < nprocs do
-        process_one results_queue (fun msg ->
+        Pqueue.process_one_copy results_queue (fun msg ->
             match msg with
             | [] -> incr nb_finished
             | xs ->
@@ -227,9 +182,6 @@ module Parmap = struct
       let output = ref [] in
       let mux x =
         output := x :: !output in
-      (* for safety *)
-      set_copy_on_work ();
-      set_copy_on_mux ();
       (* parallel work *)
       run ~verbose:false ~csize ~nprocs:ncores ~demux ~work:f ~mux;
       !output
@@ -241,8 +193,6 @@ module Parmap = struct
       let demux () = match !input with
         | [] -> raise End_of_input
         | x :: xs -> (input := xs; x) in
-      (* for safety *)
-      set_copy_on_work ();
       (* parallel work *)
       run ~verbose:false ~csize ~nprocs:ncores ~demux ~work:f ~mux:ignore
 
@@ -256,9 +206,6 @@ module Parmap = struct
       let output = ref init in
       let mux x =
         output := g !output x in
-      (* for safety *)
-      set_copy_on_work ();
-      set_copy_on_mux ();
       (* parallel work *)
       run ~verbose:false ~csize ~nprocs:ncores ~demux ~work:f ~mux;
       !output
