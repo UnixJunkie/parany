@@ -2,13 +2,18 @@
 (library
   (name parany)
   (public_name parany)
-  (modules parany)
-  (libraries unix threads netmulticore netsys cpu))
+  (modules parany send)
+  (libraries unix threads netmulticore netsys cpu sendmsg bytearray))
 
 (executables
-  (names test send)
-  (modules test send)
-  (libraries parany unix sendmsg bytearray))
+  (names test)
+  (modules test)
+  (libraries parany unix bytearray))
+
+; (executables
+;   (names test send)
+;   (modules test send)
+;   (libraries parany unix bytearray))
 
 (alias
   (name runtest)
