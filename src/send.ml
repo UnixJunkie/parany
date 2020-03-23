@@ -9,12 +9,11 @@ let unmarshal_from_file fn =
       (Unix.map_file fd Bigarray.char Bigarray.c_layout true [|-1|]) in
   let res = Bytearray.unmarshal a 0 in
   Unix.close fd;
-  Sys.remove fn;
   res
 
 let marshal_to_file fn v =
   (* mmap -> O_RDWR *)
-  let fd = Unix.(openfile fn [O_RDWR; O_CREAT; O_EXCL] 0o600) in
+  let fd = Unix.(openfile fn [O_RDWR] 0o600) in
   let s = Marshal.to_string v [Marshal.No_sharing] in
   ignore(Bytearray.mmap_of_string fd s);
   Unix.close fd
@@ -45,4 +44,4 @@ let main () =
   Array.iter (printf " %d") message_in;
   printf "\n"
 
-let () = main ()
+(* let () = main () *)
