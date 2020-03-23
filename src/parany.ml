@@ -37,21 +37,6 @@ module Pqueue = struct
   let destroy q =
     Netmcore_mempool.unlink_mempool q.id
 
-  (* Unix.sleepf, but for all OCaml versions *)
-  let unix_sleepf (timeout: float): unit =
-    let elapsed = ref 0.0 in
-    while !elapsed < timeout do
-      let start = Unix.gettimeofday () in
-      begin
-        try ignore(Unix.select [] [] [] (timeout -. !elapsed))
-        with Unix.Unix_error(EINTR, _, _) -> ()
-      end;
-      let stop = Unix.gettimeofday () in
-      let dt = stop -. start in
-      elapsed := !elapsed +. dt
-    done;
-    ()
-
   let rec push queue (x: 'a list): unit =
     let could_push =
       try (Netmcore_queue.push x queue.q; true) (* push elt *)
@@ -66,10 +51,10 @@ module Pqueue = struct
            and prevents clients from popping.
            So, we wait for the size to significantly decrease
            before trying again *)
-        unix_sleepf 0.001;
+        Unix.sleepf 0.001;
         let low_water_mark = (current_size * 10) / 100 in
         while Netmcore_queue.length queue.q >= low_water_mark do
-          unix_sleepf 0.001
+          Unix.sleepf 0.001
         done;
         push queue x (* try to push again *)
       end
@@ -84,9 +69,9 @@ module Pqueue = struct
         if !debug then
           Pr.eprintf "warn: Pqueue.process_one_in_place: empty: %s\n%!"
             queue.name;
-        unix_sleepf 0.001;
+        Unix.sleepf 0.001;
         while Netmcore_queue.is_empty queue.q do
-          unix_sleepf 0.001
+          Unix.sleepf 0.001
         done;
         process_one_in_place queue f
       end
@@ -100,9 +85,9 @@ module Pqueue = struct
         if !debug then
           Pr.eprintf "warn: Pqueue.process_one_copy: empty: %s\n%!"
             queue.name;
-        unix_sleepf 0.001;
+        Unix.sleepf 0.001;
         while Netmcore_queue.is_empty queue.q do
-          unix_sleepf 0.001
+          Unix.sleepf 0.001
         done;
         process_one_copy queue f
       end
