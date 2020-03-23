@@ -2,7 +2,7 @@
 open Printf
 
 let unmarshal_from_file fn =
-  (* O_RDWR is required by mmap *)
+  (* mmap -> O_RDWR *)
   let fd = Unix.(openfile fn [O_RDWR] 0) in
   let a =
     Bigarray.array1_of_genarray
@@ -13,7 +13,7 @@ let unmarshal_from_file fn =
   res
 
 let marshal_to_file fn v =
-  (* O_RDWR is required by mmap *)
+  (* mmap -> O_RDWR *)
   let fd = Unix.(openfile fn [O_RDWR; O_CREAT; O_EXCL] 0o600) in
   let s = Marshal.to_string v [Marshal.No_sharing] in
   ignore(Bytearray.mmap_of_string fd s);
