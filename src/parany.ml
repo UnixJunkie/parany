@@ -14,25 +14,54 @@ let disable_core_pinning () =
 
 exception End_of_input
 
-let send queue to_send =
-  let fn = Fn.temp_file "parany_" "" in
-  Send.marshal_to_file fn to_send;
-  ignore(Send.send queue fn)
+module Send = struct
 
-let receive queue buff =
-  let count, fn = Send.receive queue buff in
-  if fn = "EOF" then
-    raise End_of_input
-  else
-    begin
-      (* no message should have length 0 *)
-      (* the buffer should never be completely filled by the message
-       * because the message is just a rather short filename *)
-      assert(count > 0 && count < (Bytes.length buff));
-      let res = Send.unmarshal_from_file fn in
-      Sys.remove fn;
-      res
-    end
+  let unmarshal_from_file fn =
+    (* mmap -> O_RDWR *)
+    let fd = Unix.(openfile fn [O_RDWR] 0) in
+    let a =
+      Bigarray.array1_of_genarray
+        (Unix.map_file fd Bigarray.char Bigarray.c_layout true [|-1|]) in
+    let res = Bytearray.unmarshal a 0 in
+    Unix.close fd;
+    res
+
+  let marshal_to_file fn v =
+    (* mmap -> O_RDWR *)
+    let fd = Unix.(openfile fn [O_RDWR] 0o600) in
+    let s = Marshal.to_string v [Marshal.No_sharing] in
+    ignore(Bytearray.mmap_of_string fd s);
+    Unix.close fd
+
+  let raw_send sock str =
+    Sendmsg.send sock (Bytes.unsafe_of_string str) 0 (String.length str)
+
+  let send queue to_send =
+    let fn = Fn.temp_file "parany_" "" in
+    marshal_to_file fn to_send;
+    ignore(raw_send queue fn)
+
+  let raw_receive sock buff =
+    let count, none = Sendmsg.recv sock buff 0 (Bytes.length buff) in
+    assert(none = None);
+    (count, Bytes.sub_string buff 0 count)
+
+  let receive queue buff =
+    let count, fn = raw_receive queue buff in
+    if fn = "EOF" then
+      raise End_of_input
+    else
+      begin
+        (* no message should have length 0 *)
+        (* the buffer should never be completely filled by the message
+         * because the message is just a rather short filename *)
+        assert(count > 0 && count < (Bytes.length buff));
+        let res = unmarshal_from_file fn in
+        Sys.remove fn;
+        res
+      end
+
+end
 
 (* feeder process main loop *)
 let feed_them_all csize ncores demux queue =
@@ -44,14 +73,14 @@ let feed_them_all csize ncores demux queue =
       for _ = 1 to csize do
         to_send := (demux ()) :: !to_send
       done;
-      send queue !to_send
+      Send.send queue !to_send
     done;
     assert(false)
   with End_of_input ->
     begin
       (* send one EOF to each worker *)
       for _i = 1 to ncores do
-        ignore(Send.send queue "EOF")
+        ignore(Send.raw_send queue "EOF")
       done;
       printf "feeder %d: finished\n%!" pid;
       Unix.close queue
@@ -64,16 +93,16 @@ let go_to_work jobs_queue work results_queue =
   try
     let buff = Bytes.create 80 in
     while true do
-      let xs = receive jobs_queue buff in
+      let xs = Send.receive jobs_queue buff in
       let ys = List.rev_map work xs in
       printf "worker %d: did one\n%!" pid;
-      send results_queue ys
+      Send.send results_queue ys
     done;
   with End_of_input ->
     begin
       (* tell collector to stop *)
-      printf "worker %d: I'm done\n%!" pid;
-      ignore(Send.send results_queue "EOF");
+      printf "worker %d: finished\n%!" pid;
+      ignore(Send.raw_send results_queue "EOF");
       Unix.close results_queue
     end
 
@@ -121,13 +150,14 @@ let run ~verbose ~csize ~nprocs ~demux ~work ~mux =
       while !finished < nprocs do
         try
           while true do
-            let xs = receive res_out buff in
+            let xs = Send.receive res_out buff in
             printf "father %d: collecting one\n%!" pid;
             List.iter mux xs
           done
         with End_of_input ->
           incr finished
       done;
+      printf "father %d: finished\n%!" pid;
       (* free resources *)
       List.iter (Unix.close) [jobs_in; jobs_out; res_in; res_out]
     end
