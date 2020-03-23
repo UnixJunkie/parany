@@ -1,11 +1,8 @@
 
-module Pr = Printf
+open Printf
+module Fn = Filename
 
 let debug = ref false
-
-type 'a t = { id: Netmcore.res_id;
-              name: string;
-              q: ('a, unit) Netmcore_queue.squeue }
 
 let core_pinning = ref false (* OFF by default, because of multi-users *)
 
@@ -15,102 +12,70 @@ let enable_core_pinning () =
 let disable_core_pinning () =
   core_pinning := false
 
-(* queue for parallel processing *)
-module Pqueue = struct
-
-  let create name =
-    let mem_pool_id = Netmcore_mempool.create_mempool (1024 * 1024) in
-    let queue = Netmcore_queue.create mem_pool_id () in
-    { id = mem_pool_id;
-      name = name;
-      q = queue }
-
-  let destroy q =
-    Netmcore_mempool.unlink_mempool q.id
-
-  let rec push queue (x: 'a list): unit =
-    let could_push =
-      try (Netmcore_queue.push x queue.q; true) (* push elt *)
-      with Netmcore_mempool.Out_of_pool_memory -> false in
-    if not could_push then
-      begin (* queue is full *)
-        let current_size = Netmcore_queue.length queue.q in
-        if !debug then
-          Pr.eprintf "warn: Pqueue.push: %s: full: %d messages\n%!"
-            queue.name current_size;
-        (* apparently, trying to push to a full queue monopolizes the semaphore
-           and prevents clients from popping.
-           So, we wait for the size to significantly decrease
-           before trying again *)
-        Unix.sleepf 0.001;
-        let low_water_mark = (current_size * 10) / 100 in
-        while Netmcore_queue.length queue.q >= low_water_mark do
-          Unix.sleepf 0.001
-        done;
-        push queue x (* try to push again *)
-      end
-
-  let rec process_one_copy queue (f: 'a list -> unit): unit =
-    let could_pop =
-      try (f (Netmcore_queue.pop_c queue.q); true)
-      with Netmcore_queue.Empty -> false in
-    if not could_pop then
-      begin
-        if !debug then
-          Pr.eprintf "warn: Pqueue.process_one_copy: empty: %s\n%!"
-            queue.name;
-        Unix.sleepf 0.001;
-        while Netmcore_queue.is_empty queue.q do
-          Unix.sleepf 0.001
-        done;
-        process_one_copy queue f
-      end
-
-end
-
 exception End_of_input
 
+let send queue to_send =
+  let fn = Fn.temp_file "parany_" "" in
+  Send.marshal_to_file fn to_send;
+  ignore(Send.send queue fn)
+
+let receive queue buff =
+  let count, fn = Send.receive queue buff in
+  if fn = "EOF" then
+    raise End_of_input
+  else
+    begin
+      (* no message should have length 0 *)
+      (* the buffer should never be completely filled by the message
+       * because the message is just a rather short filename *)
+      assert(count > 0 && count < (Bytes.length buff));
+      let res = Send.unmarshal_from_file fn in
+      Sys.remove fn;
+      res
+    end
+
 (* feeder process main loop *)
-let feed_them_all csize nprocs demux queue =
-  (* let pid = Unix.getpid () in *)
-  (* printf "feeder %d: started\n%!" pid; *)
-  let to_send = ref [] in
+let feed_them_all csize ncores demux queue =
+  let pid = Unix.getpid () in
+  printf "feeder %d: started\n%!" pid;
   try
     while true do
+      let to_send = ref [] in
       for _ = 1 to csize do
-        let x = demux () in
-        to_send := x :: !to_send
+        to_send := (demux ()) :: !to_send
       done;
-      Pqueue.push queue !to_send;
-      to_send := []
-    done
+      send queue !to_send
+    done;
+    assert(false)
   with End_of_input ->
     begin
-      if !to_send <> [] then Pqueue.push queue !to_send;
-      (* tell workers to stop *)
-      (* printf "feeder %d: telling workers to stop\n%!" pid; *)
-      for _ = 1 to nprocs do
-        Pqueue.push queue []
-      done
+      (* send one EOF to each worker *)
+      for _i = 1 to ncores do
+        ignore(Send.send queue "EOF")
+      done;
+      printf "feeder %d: finished\n%!" pid;
+      Unix.close queue
     end
 
 (* worker process loop *)
 let go_to_work jobs_queue work results_queue =
-  (* let pid = Unix.getpid () in *)
-  (* printf "worker %d: started\n%!" pid; *)
-  let finished = ref false in
-  while not !finished do
-    Pqueue.process_one_copy jobs_queue (function
-        | [] -> finished := true
-        | xs ->
-          let ys = List.rev_map work xs in
-          (* printf "worker %d: did one\n%!" pid; *)
-          Pqueue.push results_queue ys
-      )
-  done;
-  (* tell collector to stop *)
-  (* printf "worker %d: I'm done\n%!" pid; *)
-  Pqueue.push results_queue []
+  let pid = Unix.getpid () in
+  printf "worker %d: started\n%!" pid;
+  try
+    let buff = Bytes.create 80 in
+    while true do
+      let xs = receive jobs_queue buff in
+      let ys = List.rev_map work xs in
+      printf "worker %d: did one\n%!" pid;
+      send results_queue ys
+    done;
+  with End_of_input ->
+    begin
+      (* tell collector to stop *)
+      printf "worker %d: I'm done\n%!" pid;
+      ignore(Send.send results_queue "EOF");
+      Unix.close results_queue
+    end
 
 let fork_out f =
   match Unix.fork () with
@@ -133,37 +98,38 @@ let run ~verbose ~csize ~nprocs ~demux ~work ~mux =
       let max_cores = Cpu.numcores () in
       assert(nprocs <= max_cores);
       (* parallel version *)
-      (* let pid = Unix.getpid () in *)
-      (* printf "father %d: started\n%!" pid; *)
+      let pid = Unix.getpid () in
+      printf "father %d: started\n%!" pid;
       (* create queues *)
-      let jobs_queue = Pqueue.create "jobs_in" in
-      let results_queue = Pqueue.create "results_out" in
+      let jobs_in, jobs_out = Unix.(socketpair PF_UNIX SOCK_DGRAM 0) in
+      let res_in, res_out = Unix.(socketpair PF_UNIX SOCK_DGRAM 0) in
       (* start feeder *)
-      (* printf "father %d: starting feeder\n%!" pid; *)
+      printf "father %d: starting feeder\n%!" pid;
       Gc.compact (); (* like parmap: reclaim memory prior to forking *)
-      fork_out (fun () -> feed_them_all csize nprocs demux jobs_queue);
+      fork_out (fun () -> feed_them_all csize nprocs demux jobs_in);
       (* start workers *)
       for worker_rank = 0 to nprocs - 1 do
-        (* printf "father %d: starting a worker\n%!" pid; *)
+        printf "father %d: starting a worker\n%!" pid;
         fork_out (fun () ->
             if !core_pinning then Cpu.setcore worker_rank;
-            go_to_work jobs_queue work results_queue
+            go_to_work jobs_out work res_in
           )
       done;
       (* collect results *)
-      let nb_finished = ref 0 in
-      while !nb_finished < nprocs do
-        Pqueue.process_one_copy results_queue (fun msg ->
-            match msg with
-            | [] -> incr nb_finished
-            | xs ->
-              (* printf "father %d: collecting one\n%!" pid; *)
-              List.iter mux xs
-          )
+      let finished = ref 0 in
+      let buff = Bytes.create 80 in
+      while !finished < nprocs do
+        try
+          while true do
+            let xs = receive res_out buff in
+            printf "father %d: collecting one\n%!" pid;
+            List.iter mux xs
+          done
+        with End_of_input ->
+          incr finished
       done;
       (* free resources *)
-      Pqueue.destroy jobs_queue;
-      Pqueue.destroy results_queue
+      List.iter (Unix.close) [jobs_in; jobs_out; res_in; res_out]
     end
 
 (* Wrapper for near-compatibility with Parmap *)
