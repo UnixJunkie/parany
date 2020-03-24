@@ -6,13 +6,11 @@ homepage: "https://github.com/UnixJunkie/parany"
 bug-reports: "https://github.com/UnixJunkie/parany/issues"
 dev-repo: "git+https://github.com/UnixJunkie/parany.git"
 depends: [
-  "ocaml"
-  "dune" {>= "1.6.0"}
   "base-unix"
-  "ocamlnet"
   "cpu"
+  "dune" {>= "1.6.0"}
+  "ocaml"
   "sendmsg"
-  "bytearray"
 ]
 build: [
   ["dune" "build" "-p" name "-j" jobs]
@@ -35,7 +33,15 @@ The number of processors running your computation in parallel is called
 The chunk size (number of items) processed by one call to the 'work' function
 is called 'csize'.
 
+There is a minimalist Parmap module, if you want to switch
+to/from Parmap easily.
+
 Read the corresponding ocamldoc before using.
+
+USING THIS LIBRARY IN A MISSION CRITICAL, LONG-RUNNING SOFTWARE
+THAT IS NEVER SUPPOSED TO CRASH IS NOT ADVIZED.
+WHILE THIS LIBRARY IS HIGH PERFORMANCE, IT IS ALSO DANGEROUS.
+USE AT YOUR OWN RISKS.
 """
 #url {
 #  src: "https://github.com/UnixJunkie/parany/archive/vXXX.tar.gz"
