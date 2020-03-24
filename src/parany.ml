@@ -16,37 +16,34 @@ exception End_of_input
 
 module Shm = struct
 
-  let unmarshal_from_file prfx fn =
-    let fd = Unix.(openfile fn [O_RDONLY] 0) in
-    eprintf "%s consuming: %s sz: %d\n%!" prfx fn (Unix.fstat fd).st_size;
-    let a =
-      Bigarray.array1_of_genarray
-        (Unix.map_file fd Bigarray.char Bigarray.c_layout false [|-1|]) in
-    (* eprintf "fn: %s sz: %d\n%!" fn (Unix.fstat fd).st_size; *)
-    let res = Bytearray.unmarshal a 0 in
-    Unix.close fd;
+  let unmarshal_from_file fn =
+    let input = open_in_bin fn in
+    let res = Marshal.from_channel input in
+    close_in input;
     res
+    (* let fd = Unix.(openfile fn [O_RDONLY] 0) in
+     * let a =
+     *   Bigarray.array1_of_genarray
+     *     (Unix.map_file fd Bigarray.char Bigarray.c_layout false [|-1|]) in
+     * let res = Bytearray.unmarshal a 0 in
+     * Unix.close fd;
+     * res *)
 
-  (* let test_files l =
-   *   List.iter (fun fn ->
-   *       printf "fn: %s\n%!" fn;
-   *       ignore(unmarshal_from_file fn)
-   *     ) l *)
-
-  let marshal_to_file prfx fn v =
-    (* mmap -> O_RDWR *)
-    let fd = Unix.(openfile fn [O_RDWR] 0o600) in
-    let s = Marshal.to_string v [Marshal.No_sharing] in
-    ignore(Bytearray.mmap_of_string fd s);
-    eprintf "%s created: %s sz: %d\n%!" prfx fn (Unix.fstat fd).st_size;
-    Unix.close fd
+  let marshal_to_file fn v =
+    let out = open_out_bin fn in
+    Marshal.to_channel out v [Marshal.No_sharing];
+    close_out out
+    (* (\* mmap -> O_RDWR *\)
+     * let fd = Unix.(openfile fn [O_CREAT;O_EXCL;O_RDWR] 0o600) in
+     * let s = Marshal.to_string v [Marshal.No_sharing] in
+     * ignore(Bytearray.mmap_of_string fd s);
+     * Unix.close fd *)
 
   let raw_send sock str =
     Sendmsg.send sock (Bytes.unsafe_of_string str) 0 (String.length str)
 
-  let send prfx queue to_send =
-    let fn = Fn.temp_file "parany_" "" in
-    marshal_to_file prfx fn to_send;
+  let send fn queue to_send =
+    marshal_to_file fn to_send;
     ignore(raw_send queue fn)
 
   let raw_receive sock buff =
@@ -54,7 +51,7 @@ module Shm = struct
     assert(none = None);
     (count, Bytes.sub_string buff 0 count)
 
-  let receive prfx queue buff =
+  let receive queue buff =
     let count, fn = raw_receive queue buff in
     if fn = "EOF" then
       raise End_of_input
@@ -64,8 +61,7 @@ module Shm = struct
         (* the buffer should never be completely filled by the message
          * because the message is just a rather short filename *)
         assert(count > 0 && count < (Bytes.length buff));
-        (* eprintf "%s consuming: %s\n%!" prfx fn; *)
-        let res = unmarshal_from_file prfx fn in
+        let res = unmarshal_from_file fn in
         Sys.remove fn;
         res
       end
@@ -74,16 +70,19 @@ end
 
 (* feeder process main loop *)
 let feed_them_all csize ncores demux queue =
-  let pid = Unix.getpid () in
-  let prfx = sprintf "feeder(%d)" pid in
-  eprintf "feeder(%d) started\n%!" pid;
+  (* let pid = Unix.getpid () in *)
+  let i = ref 0 in
+  let prfx = Filename.temp_file "prni_" "" in
+  (* eprintf "feeder(%d) started\n%!" pid; *)
   try
     while true do
       let to_send = ref [] in
       for _ = 1 to csize do
         to_send := (demux ()) :: !to_send
       done;
-      Shm.send prfx queue !to_send
+      let fn = sprintf "%s_%d" prfx !i in
+      Shm.send fn queue !to_send;
+      incr i
     done;
     assert(false)
   with End_of_input ->
@@ -92,27 +91,32 @@ let feed_them_all csize ncores demux queue =
       for _i = 1 to ncores do
         ignore(Shm.raw_send queue "EOF")
       done;
-      eprintf "feeder(%d) finished\n%!" pid;
+      (* eprintf "feeder(%d) finished\n%!" pid; *)
+      Sys.remove prfx;
       Unix.close queue
     end
 
 (* worker process loop *)
 let go_to_work jobs_queue work results_queue =
-  let pid = Unix.getpid () in
-  let prfx = sprintf "worker(%d)" pid in
-  eprintf "worker(%d) started\n%!" pid;
+  (* let pid = Unix.getpid () in *)
+  let i = ref 0 in
+  let prfx = Filename.temp_file "prno_" "" in
+  (* eprintf "worker(%d) started\n%!" pid; *)
   try
     let buff = Bytes.create 80 in
     while true do
-      let xs = Shm.receive prfx jobs_queue buff in
+      let xs = Shm.receive jobs_queue buff in
       let ys = List.rev_map work xs in
-      eprintf "worker(%d) did one\n%!" pid;
-      Shm.send prfx results_queue ys
+      (* eprintf "worker(%d) did one\n%!" pid; *)
+      let fn = sprintf "%s_%d" prfx !i in
+      Shm.send fn results_queue ys;
+      incr i
     done;
   with End_of_input ->
     begin
       (* tell collector to stop *)
-      eprintf "worker(%d) finished\n%!" pid;
+      (* eprintf "worker(%d) finished\n%!" pid; *)
+      Sys.remove prfx;
       ignore(Shm.raw_send results_queue "EOF");
       Unix.close results_queue
     end
@@ -138,19 +142,18 @@ let run ~verbose ~csize ~nprocs ~demux ~work ~mux =
       let max_cores = Cpu.numcores () in
       assert(nprocs <= max_cores);
       (* parallel version *)
-      let pid = Unix.getpid () in
-      let prfx = sprintf "father(%d)" pid in
-      eprintf "father(%d) started\n%!" pid;
+      (* let pid = Unix.getpid () in *)
+      (* eprintf "father(%d) started\n%!" pid; *)
       (* create queues *)
       let jobs_in, jobs_out = Unix.(socketpair PF_UNIX SOCK_DGRAM 0) in
       let res_in, res_out = Unix.(socketpair PF_UNIX SOCK_DGRAM 0) in
       (* start feeder *)
-      eprintf "father(%d) starting feeder\n%!" pid;
+      (* eprintf "father(%d) starting feeder\n%!" pid; *)
       Gc.compact (); (* like parmap: reclaim memory prior to forking *)
       fork_out (fun () -> feed_them_all csize nprocs demux jobs_in);
       (* start workers *)
       for worker_rank = 0 to nprocs - 1 do
-        eprintf "father(%d) starting a worker\n%!" pid;
+        (* eprintf "father(%d) starting a worker\n%!" pid; *)
         fork_out (fun () ->
             if !core_pinning then Cpu.setcore worker_rank;
             go_to_work jobs_out work res_in
@@ -162,14 +165,14 @@ let run ~verbose ~csize ~nprocs ~demux ~work ~mux =
       while !finished < nprocs do
         try
           while true do
-            let xs = Shm.receive prfx res_out buff in
-            eprintf "father(%d) collecting one\n%!" pid;
+            let xs = Shm.receive res_out buff in
+            (* eprintf "father(%d) collecting one\n%!" pid; *)
             List.iter mux xs
           done
         with End_of_input ->
           incr finished
       done;
-      eprintf "father(%d) finished\n%!" pid;
+      (* eprintf "father(%d) finished\n%!" pid; *)
       (* free resources *)
       List.iter (Unix.close) [jobs_in; jobs_out; res_in; res_out]
     end
