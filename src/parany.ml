@@ -21,6 +21,7 @@ module Shm = struct
     let res = Marshal.from_channel input in
     close_in input;
     res
+    (* FBR: the bytearray library is less reliable than Marshal. *)
     (* let fd = Unix.(openfile fn [O_RDONLY] 0) in
      * let a =
      *   Bigarray.array1_of_genarray
@@ -33,6 +34,7 @@ module Shm = struct
     let out = open_out_bin fn in
     Marshal.to_channel out v [Marshal.No_sharing];
     close_out out
+    (* FBR: the bytearray library is less reliable than Marshal. *)
     (* (\* mmap -> O_RDWR *\)
      * let fd = Unix.(openfile fn [O_CREAT;O_EXCL;O_RDWR] 0o600) in
      * let s = Marshal.to_string v [Marshal.No_sharing] in
@@ -71,24 +73,23 @@ end
 (* feeder process main loop *)
 let feed_them_all csize ncores demux queue =
   (* let pid = Unix.getpid () in *)
-  let i = ref 0 in
-  let prfx = Filename.temp_file "prni_" "" in
   (* eprintf "feeder(%d) started\n%!" pid; *)
+  let in_count = ref 0 in
+  let prfx = Filename.temp_file "iparany_" "" in
   try
     while true do
       let to_send = ref [] in
       for _ = 1 to csize do
         to_send := (demux ()) :: !to_send
       done;
-      let fn = sprintf "%s_%d" prfx !i in
+      let fn = sprintf "%s_%d" prfx !in_count in
       Shm.send fn queue !to_send;
-      incr i
-    done;
-    assert(false)
+      incr in_count
+    done
   with End_of_input ->
     begin
-      (* send one EOF to each worker *)
-      for _i = 1 to ncores do
+      (* send an EOF to each worker *)
+      for _ = 1 to ncores do
         ignore(Shm.raw_send queue "EOF")
       done;
       (* eprintf "feeder(%d) finished\n%!" pid; *)
@@ -99,19 +100,19 @@ let feed_them_all csize ncores demux queue =
 (* worker process loop *)
 let go_to_work jobs_queue work results_queue =
   (* let pid = Unix.getpid () in *)
-  let i = ref 0 in
-  let prfx = Filename.temp_file "prno_" "" in
   (* eprintf "worker(%d) started\n%!" pid; *)
+  let out_count = ref 0 in
+  let prfx = Filename.temp_file "oparany_" "" in
   try
     let buff = Bytes.create 80 in
     while true do
       let xs = Shm.receive jobs_queue buff in
       let ys = List.rev_map work xs in
       (* eprintf "worker(%d) did one\n%!" pid; *)
-      let fn = sprintf "%s_%d" prfx !i in
+      let fn = sprintf "%s_%d" prfx !out_count in
       Shm.send fn results_queue ys;
-      incr i
-    done;
+      incr out_count
+    done
   with End_of_input ->
     begin
       (* tell collector to stop *)
@@ -174,7 +175,7 @@ let run ~verbose ~csize ~nprocs ~demux ~work ~mux =
       done;
       (* eprintf "father(%d) finished\n%!" pid; *)
       (* free resources *)
-      List.iter (Unix.close) [jobs_in; jobs_out; res_in; res_out]
+      List.iter Unix.close [jobs_in; jobs_out; res_in; res_out]
     end
 
 (* Wrapper for near-compatibility with Parmap *)
