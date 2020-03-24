@@ -28,9 +28,7 @@ val disable_core_pinning: unit -> unit
     you are using and the granularity of your computation.
     Elements which are fast to process may benefit from
     a [csize] greater than one.
-    In order to troubleshoot an application, run parany with [verbose]
-    set to true. This will print messages on stderr when a queue
-    is empty or full. *)
+    [verbose] is unused for the time being. *)
 val run:
   verbose:bool ->
   csize:int ->
