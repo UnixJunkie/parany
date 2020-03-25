@@ -16,57 +16,44 @@ exception End_of_input
 
 module Shm = struct
 
+  let init () =
+    Unix.(socketpair PF_UNIX SOCK_DGRAM 0)
+
   let unmarshal_from_file fn =
     let input = open_in_bin fn in
     let res = Marshal.from_channel input in
     close_in input;
     res
-    (* FBR: the bytearray library is less reliable than Marshal. *)
-    (* let fd = Unix.(openfile fn [O_RDONLY] 0) in
-     * let a =
-     *   Bigarray.array1_of_genarray
-     *     (Unix.map_file fd Bigarray.char Bigarray.c_layout false [|-1|]) in
-     * let res = Bytearray.unmarshal a 0 in
-     * Unix.close fd;
-     * res *)
 
   let marshal_to_file fn v =
     let out = open_out_bin fn in
     Marshal.to_channel out v [Marshal.No_sharing];
     close_out out
-    (* FBR: the bytearray library is less reliable than Marshal. *)
-    (* (\* mmap -> O_RDWR *\)
-     * let fd = Unix.(openfile fn [O_CREAT;O_EXCL;O_RDWR] 0o600) in
-     * let s = Marshal.to_string v [Marshal.No_sharing] in
-     * ignore(Bytearray.mmap_of_string fd s);
-     * Unix.close fd *)
 
   let raw_send sock str =
-    Sendmsg.send sock (Bytes.unsafe_of_string str) 0 (String.length str)
+    let n = String.length str in
+    let buff = Bytes.unsafe_of_string str in
+    let sent = Unix.send sock buff 0 n [] in
+    assert(sent = n)
 
   let send fn queue to_send =
     marshal_to_file fn to_send;
     ignore(raw_send queue fn)
 
   let raw_receive sock buff =
-    let count, none = Sendmsg.recv sock buff 0 (Bytes.length buff) in
-    assert(none = None);
-    (count, Bytes.sub_string buff 0 count)
+    let n = Bytes.length buff in
+    let received = Unix.recv sock buff 0 n [] in
+    assert(received > 0);
+    Bytes.sub_string buff 0 received
 
   let receive queue buff =
-    let count, fn = raw_receive queue buff in
+    let fn = raw_receive queue buff in
     if fn = "EOF" then
       raise End_of_input
     else
-      begin
-        (* no message should have length 0 *)
-        (* the buffer should never be completely filled by the message
-         * because the message is just a rather short filename *)
-        assert(count > 0 && count < (Bytes.length buff));
-        let res = unmarshal_from_file fn in
-        Sys.remove fn;
-        res
-      end
+      let res = unmarshal_from_file fn in
+      Sys.remove fn;
+      res
 
 end
 
@@ -99,8 +86,8 @@ let feed_them_all csize ncores demux queue =
 
 (* worker process loop *)
 let go_to_work jobs_queue work results_queue =
-  (* let pid = Unix.getpid () in *)
-  (* eprintf "worker(%d) started\n%!" pid; *)
+  (* let pid = Unix.getpid () in
+   * eprintf "worker(%d) started\n%!" pid; *)
   let out_count = ref 0 in
   let prfx = Filename.temp_file "oparany_" "" in
   try
@@ -146,8 +133,8 @@ let run ~verbose ~csize ~nprocs ~demux ~work ~mux =
       (* let pid = Unix.getpid () in *)
       (* eprintf "father(%d) started\n%!" pid; *)
       (* create queues *)
-      let jobs_in, jobs_out = Unix.(socketpair PF_UNIX SOCK_DGRAM 0) in
-      let res_in, res_out = Unix.(socketpair PF_UNIX SOCK_DGRAM 0) in
+      let jobs_in, jobs_out = Shm.init () in
+      let res_in, res_out = Shm.init () in
       (* start feeder *)
       (* eprintf "father(%d) starting feeder\n%!" pid; *)
       Gc.compact (); (* like parmap: reclaim memory prior to forking *)
