@@ -37,6 +37,7 @@ module Shm = struct
     with Unix.(Unix_error(ENOBUFS, _, _)) ->
       (* send on a UDP socket never blocks on Mac OS X
          and probably several of the BSDs *)
+      (* eprintf "sleep\n%!"; *)
       let () = Unix.sleepf 0.001 in (* wait *)
       (* FBR: for precision, we should really use nanosleep... *)
       send_loop sock buff n
@@ -48,7 +49,7 @@ module Shm = struct
 
   let send fn queue to_send =
     marshal_to_file fn to_send;
-    ignore(raw_send queue fn)
+    raw_send queue fn
 
   let raw_receive sock buff =
     let n = Bytes.length buff in
@@ -67,10 +68,10 @@ module Shm = struct
 
 end
 
-(* feeder process main loop *)
+(* feeder process loop *)
 let feed_them_all csize ncores demux queue =
-  (* let pid = Unix.getpid () in *)
-  (* eprintf "feeder(%d) started\n%!" pid; *)
+  (* let pid = Unix.getpid () in
+   * eprintf "feeder(%d) started\n%!" pid; *)
   let in_count = ref 0 in
   let prfx = Filename.temp_file "iparany_" "" in
   let to_send = ref [] in
@@ -81,18 +82,19 @@ let feed_them_all csize ncores demux queue =
       done;
       let fn = sprintf "%s_%d" prfx !in_count in
       Shm.send fn queue !to_send;
+      (* eprintf "feeder(%d) sent one\n%!" pid; *)
       to_send := [];
       incr in_count
     done
   with End_of_input ->
     begin
       (* if needed, send remaining jobs (< csize) *)
-      if !to_send <> [] then
-        let fn = sprintf "%s_%d" prfx !in_count in
-        Shm.send fn queue !to_send;
+      (if !to_send <> [] then
+         let fn = sprintf "%s_%d" prfx !in_count in
+         Shm.send fn queue !to_send);
       (* send an EOF to each worker *)
       for _ = 1 to ncores do
-        ignore(Shm.raw_send queue "EOF")
+        Shm.raw_send queue "EOF"
       done;
       (* eprintf "feeder(%d) finished\n%!" pid; *)
       Sys.remove prfx;
@@ -120,7 +122,7 @@ let go_to_work jobs_queue work results_queue =
       (* tell collector to stop *)
       (* eprintf "worker(%d) finished\n%!" pid; *)
       Sys.remove prfx;
-      ignore(Shm.raw_send results_queue "EOF");
+      Shm.raw_send results_queue "EOF";
       Unix.close results_queue
     end
 
@@ -145,8 +147,8 @@ let run ~verbose ~csize ~nprocs ~demux ~work ~mux =
       let max_cores = Cpu.numcores () in
       assert(nprocs <= max_cores);
       (* parallel version *)
-      (* let pid = Unix.getpid () in *)
-      (* eprintf "father(%d) started\n%!" pid; *)
+      (* let pid = Unix.getpid () in
+       * eprintf "father(%d) started\n%!" pid; *)
       (* create queues *)
       let jobs_in, jobs_out = Shm.init () in
       let res_in, res_out = Shm.init () in
