@@ -30,11 +30,21 @@ module Shm = struct
     Marshal.to_channel out v [Marshal.No_sharing];
     close_out out
 
+  let rec send_loop sock buff n =
+    try
+      let sent = Unix.send sock buff 0 n [] in
+      assert(sent = n)
+    with Unix.(Unix_error(ENOBUFS, _, _)) ->
+      (* send on a UDP socket never blocks on Mac OS X
+         and probably several of the BSDs *)
+      let () = Unix.sleepf 0.001 in (* wait *)
+      (* FBR: for precision, we should really use nanosleep... *)
+      send_loop sock buff n
+
   let raw_send sock str =
     let n = String.length str in
     let buff = Bytes.unsafe_of_string str in
-    let sent = Unix.send sock buff 0 n [] in
-    assert(sent = n)
+    send_loop sock buff n
 
   let send fn queue to_send =
     marshal_to_file fn to_send;
