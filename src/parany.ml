@@ -73,18 +73,23 @@ let feed_them_all csize ncores demux queue =
   (* eprintf "feeder(%d) started\n%!" pid; *)
   let in_count = ref 0 in
   let prfx = Filename.temp_file "iparany_" "" in
+  let to_send = ref [] in
   try
     while true do
-      let to_send = ref [] in
       for _ = 1 to csize do
         to_send := (demux ()) :: !to_send
       done;
       let fn = sprintf "%s_%d" prfx !in_count in
       Shm.send fn queue !to_send;
+      to_send := [];
       incr in_count
     done
   with End_of_input ->
     begin
+      (* if needed, send remaining jobs (< csize) *)
+      if !to_send <> [] then
+        let fn = sprintf "%s_%d" prfx !in_count in
+        Shm.send fn queue !to_send;
       (* send an EOF to each worker *)
       for _ = 1 to ncores do
         ignore(Shm.raw_send queue "EOF")
