@@ -3,7 +3,7 @@
   (name parany)
   (public_name parany)
   (modules parany)
-  (libraries unix cpu sendmsg))
+  (libraries unix cpu))
 
 (executables
   (names test)

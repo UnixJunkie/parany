@@ -10,7 +10,6 @@ depends: [
   "cpu"
   "dune" {>= "1.6.0"}
   "ocaml"
-  "sendmsg"
 ]
 build: [
   ["dune" "build" "-p" name "-j" jobs]
