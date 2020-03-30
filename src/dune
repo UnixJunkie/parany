@@ -8,7 +8,7 @@
 (executables
   (names test)
   (modules test)
-  (libraries parany unix bytearray))
+  (libraries parany unix))
 
 (alias
   (name runtest)

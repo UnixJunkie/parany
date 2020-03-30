@@ -34,12 +34,13 @@ module Shm = struct
     try
       let sent = Unix.send sock buff 0 n [] in
       assert(sent = n)
-    with Unix.(Unix_error(ENOBUFS, _, _)) ->
+    with Unix.Unix_error(ENOBUFS, _, _) ->
       (* send on a UDP socket never blocks on Mac OS X
          and probably several of the BSDs *)
       (* eprintf "sleep\n%!"; *)
-      let () = Unix.sleepf 0.001 in (* wait *)
-      (* FBR: for precision, we should really use nanosleep... *)
+      let _ = Unix.select [] [] [] 0.001 in (* wait *)
+      (* We should use nanosleep for precision, if only it
+         was provided by the Unix module... *)
       send_loop sock buff n
 
   let raw_send sock str =
