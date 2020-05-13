@@ -1,6 +1,7 @@
 
 open Printf
 module Fn = Filename
+module Ht = Hashtbl
 
 exception End_of_input
 
@@ -122,6 +123,42 @@ let fork_out f =
   | -1 -> failwith "Parany.fork_out: fork failed"
   | 0 -> let () = f () in exit 0
   | _pid -> ()
+
+let demux_count = ref 0
+
+(* demux and index items *)
+let idemux demux () =
+  let res = (!demux_count, demux ()) in
+  incr demux_count;
+  res
+
+(* work ignoring item index *)
+let iwork work (i, x) =
+  (i, work x)
+
+let wait_list = Ht.create 11
+let mux_count = ref 0
+
+(* mux items in the right order *)
+let imux mux (i, res) =
+  if !mux_count = i then
+    begin
+      (* unpile as much as possible *)
+      mux res;
+      incr mux_count;
+      if Ht.length wait_list > 0 then
+        try
+          while true do
+            let next = Ht.find wait_list !mux_count in
+            Ht.remove wait_list !mux_count;
+            mux next;
+            incr mux_count
+          done
+        with Not_found -> () (* no more or index hole *)
+    end
+  else
+    (* put on the pile *)
+    Ht.add wait_list i res
 
 let run ?(core_pin = false)
     ?csize:(cs = 1)
