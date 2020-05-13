@@ -12,7 +12,7 @@ val enable_core_pinning: unit -> unit
 (** [disable_core_pinning ()] turn OFF core pinning. cf. [enable_core_pinning]. *)
 val disable_core_pinning: unit -> unit
 
-(** [run ~verbose:false ~csize:10 ~nprocs:16 ~demux:f ~work:g ~mux:h] will run
+(** [run ~csize:10 ~nprocs:16 ~demux:f ~work:g ~mux:h] will run
     in parallel on 16 cores the [g] function.
     Inputs to function [g] are produced by function [f]
     and grouped by 10 (the chunk size [csize]).
@@ -27,10 +27,8 @@ val disable_core_pinning: unit -> unit
     The optimal [csize] depends on your computer, the functions
     you are using and the granularity of your computation.
     Elements which are fast to process may benefit from
-    a [csize] greater than one.
-    [verbose] is unused for the time being. *)
+    a [csize] greater than one. *)
 val run:
-  verbose:bool ->
   csize:int ->
   nprocs:int ->
   demux:(unit -> 'a) ->

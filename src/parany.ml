@@ -2,8 +2,6 @@
 open Printf
 module Fn = Filename
 
-let debug = ref false
-
 let core_pinning = ref false (* OFF by default, because of multi-users *)
 
 let enable_core_pinning () =
@@ -133,8 +131,9 @@ let fork_out f =
   | 0 -> let () = f () in exit 0
   | _pid -> ()
 
-let run ~verbose ~csize ~nprocs ~demux ~work ~mux =
-  debug := verbose;
+(* let substring ?pos:(p=0) ~length:l s = String.sub s p l;; *)
+
+let run ~csize ~nprocs ~demux ~work ~mux =
   if nprocs <= 1 then
     (* sequential version *)
     try
@@ -200,7 +199,7 @@ module Parmap = struct
       let mux x =
         output := x :: !output in
       (* parallel work *)
-      run ~verbose:false ~csize ~nprocs:ncores ~demux ~work:f ~mux;
+      run ~csize ~nprocs:ncores ~demux ~work:f ~mux;
       !output
 
   let pariter ~ncores ?(csize = 1) f l =
@@ -211,7 +210,7 @@ module Parmap = struct
         | [] -> raise End_of_input
         | x :: xs -> (input := xs; x) in
       (* parallel work *)
-      run ~verbose:false ~csize ~nprocs:ncores ~demux ~work:f ~mux:ignore
+      run ~csize ~nprocs:ncores ~demux ~work:f ~mux:ignore
 
   let parfold ~ncores ?(csize = 1) f g init l =
     if ncores <= 1 then List.fold_left g init (tail_rec_map f l)
@@ -224,6 +223,6 @@ module Parmap = struct
       let mux x =
         output := g !output x in
       (* parallel work *)
-      run ~verbose:false ~csize ~nprocs:ncores ~demux ~work:f ~mux;
+      run ~csize ~nprocs:ncores ~demux ~work:f ~mux;
       !output
 end
