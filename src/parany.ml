@@ -2,14 +2,6 @@
 open Printf
 module Fn = Filename
 
-let core_pinning = ref false (* OFF by default, because of multi-users *)
-
-let enable_core_pinning () =
-  core_pinning := true
-
-let disable_core_pinning () =
-  core_pinning := false
-
 exception End_of_input
 
 module Shm = struct
@@ -131,9 +123,9 @@ let fork_out f =
   | 0 -> let () = f () in exit 0
   | _pid -> ()
 
-(* let substring ?pos:(p=0) ~length:l s = String.sub s p l;; *)
-
-let run ~csize ~nprocs ~demux ~work ~mux =
+let run ?core_pin:(pin_cores = false)
+    ?csize:(cs = 1)
+    ~nprocs ~demux ~work ~mux =
   if nprocs <= 1 then
     (* sequential version *)
     try
@@ -143,7 +135,7 @@ let run ~csize ~nprocs ~demux ~work ~mux =
     with End_of_input -> ()
   else
     begin
-      assert(csize >= 1);
+      assert(cs >= 1);
       let max_cores = Cpu.numcores () in
       assert(nprocs <= max_cores);
       (* parallel version *)
@@ -155,12 +147,12 @@ let run ~csize ~nprocs ~demux ~work ~mux =
       (* start feeder *)
       (* eprintf "father(%d) starting feeder\n%!" pid; *)
       Gc.compact (); (* like parmap: reclaim memory prior to forking *)
-      fork_out (fun () -> feed_them_all csize nprocs demux jobs_in);
+      fork_out (fun () -> feed_them_all cs nprocs demux jobs_in);
       (* start workers *)
       for worker_rank = 0 to nprocs - 1 do
         (* eprintf "father(%d) starting a worker\n%!" pid; *)
         fork_out (fun () ->
-            if !core_pinning then Cpu.setcore worker_rank;
+            if pin_cores then Cpu.setcore worker_rank;
             go_to_work jobs_out work res_in
           )
       done;
@@ -182,47 +174,47 @@ let run ~csize ~nprocs ~demux ~work ~mux =
       List.iter Unix.close [jobs_in; jobs_out; res_in; res_out]
     end
 
-(* Wrapper for near-compatibility with Parmap *)
-module Parmap = struct
-
-  let tail_rec_map f l =
-    List.rev (List.rev_map f l)
-
-  let parmap ~ncores ?(csize = 1) f l =
-    if ncores <= 1 then tail_rec_map f l
-    else
-      let input = ref l in
-      let demux () = match !input with
-        | [] -> raise End_of_input
-        | x :: xs -> (input := xs; x) in
-      let output = ref [] in
-      let mux x =
-        output := x :: !output in
-      (* parallel work *)
-      run ~csize ~nprocs:ncores ~demux ~work:f ~mux;
-      !output
-
-  let pariter ~ncores ?(csize = 1) f l =
-    if ncores <= 1 then List.iter f l
-    else
-      let input = ref l in
-      let demux () = match !input with
-        | [] -> raise End_of_input
-        | x :: xs -> (input := xs; x) in
-      (* parallel work *)
-      run ~csize ~nprocs:ncores ~demux ~work:f ~mux:ignore
-
-  let parfold ~ncores ?(csize = 1) f g init l =
-    if ncores <= 1 then List.fold_left g init (tail_rec_map f l)
-    else
-      let input = ref l in
-      let demux () = match !input with
-        | [] -> raise End_of_input
-        | x :: xs -> (input := xs; x) in
-      let output = ref init in
-      let mux x =
-        output := g !output x in
-      (* parallel work *)
-      run ~csize ~nprocs:ncores ~demux ~work:f ~mux;
-      !output
-end
+(* (\* Wrapper for near-compatibility with Parmap *\)
+ * module Parmap = struct
+ * 
+ *   let tail_rec_map f l =
+ *     List.rev (List.rev_map f l)
+ * 
+ *   let parmap ~ncores ?(csize = 1) f l =
+ *     if ncores <= 1 then tail_rec_map f l
+ *     else
+ *       let input = ref l in
+ *       let demux () = match !input with
+ *         | [] -> raise End_of_input
+ *         | x :: xs -> (input := xs; x) in
+ *       let output = ref [] in
+ *       let mux x =
+ *         output := x :: !output in
+ *       (\* parallel work *\)
+ *       run ~csize ~nprocs:ncores ~demux ~work:f ~mux;
+ *       !output
+ * 
+ *   let pariter ~ncores ?(csize = 1) f l =
+ *     if ncores <= 1 then List.iter f l
+ *     else
+ *       let input = ref l in
+ *       let demux () = match !input with
+ *         | [] -> raise End_of_input
+ *         | x :: xs -> (input := xs; x) in
+ *       (\* parallel work *\)
+ *       run ~csize ~nprocs:ncores ~demux ~work:f ~mux:ignore
+ * 
+ *   let parfold ~ncores ?(csize = 1) f g init l =
+ *     if ncores <= 1 then List.fold_left g init (tail_rec_map f l)
+ *     else
+ *       let input = ref l in
+ *       let demux () = match !input with
+ *         | [] -> raise End_of_input
+ *         | x :: xs -> (input := xs; x) in
+ *       let output = ref init in
+ *       let mux x =
+ *         output := g !output x in
+ *       (\* parallel work *\)
+ *       run ~csize ~nprocs:ncores ~demux ~work:f ~mux;
+ *       !output
+ * end *)
