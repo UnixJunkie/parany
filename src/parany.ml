@@ -165,7 +165,7 @@ let run
     ?(preserve = false)
     ?(core_pin = false)
     ?csize:(cs = 1)
-    ~nprocs ~demux ~work ~mux =
+    nprocs ~demux ~work ~mux =
   if nprocs <= 1 then
     (* sequential version *)
     try
@@ -267,7 +267,7 @@ module Parmap = struct
   let tail_rec_map f l =
     List.rev (List.rev_map f l)
 
-  let parmap ?(preserve = false) ?(core_pin = false) ~ncores ?(csize = 1) f l =
+  let parmap ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores f l =
     if ncores <= 1 then tail_rec_map f l
     else
       let input = ref l in
@@ -278,10 +278,10 @@ module Parmap = struct
       let mux x =
         output := x :: !output in
       (* parallel work *)
-      run ~preserve ~core_pin ~csize ~nprocs:ncores ~demux ~work:f ~mux;
+      run ~preserve ~core_pin ~csize ncores ~demux ~work:f ~mux;
       !output
 
-  let pariter ?(preserve = false) ?(core_pin = false) ~ncores ?(csize = 1) f l =
+  let pariter ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores f l =
     if ncores <= 1 then List.iter f l
     else
       let input = ref l in
@@ -289,9 +289,10 @@ module Parmap = struct
         | [] -> raise End_of_input
         | x :: xs -> (input := xs; x) in
       (* parallel work *)
-      run ~preserve ~core_pin ~csize ~nprocs:ncores ~demux ~work:f ~mux:ignore
+      run ~preserve ~core_pin ~csize ncores ~demux ~work:f ~mux:ignore
 
-  let parfold ?(preserve = false) ?(core_pin = false) ~ncores ?(csize = 1) f g init l =
+  let parfold ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores
+      f g init l =
     if ncores <= 1 then List.fold_left g init (tail_rec_map f l)
     else
       let input = ref l in
@@ -302,6 +303,6 @@ module Parmap = struct
       let mux x =
         output := g !output x in
       (* parallel work *)
-      run ~preserve ~core_pin ~csize ~nprocs:ncores ~demux ~work:f ~mux;
+      run ~preserve ~core_pin ~csize ncores ~demux ~work:f ~mux;
       !output
 end

@@ -38,14 +38,14 @@ val run:
 module Parmap: sig
 
   (** Parallel List.map *)
-  val parmap: ?preserve:bool -> ?core_pin:bool -> int -> ?csize:int ->
+  val parmap: ?preserve:bool -> ?core_pin:bool -> ?csize:int -> int ->
     ('a -> 'b) -> 'a list -> 'b list
 
   (** Parallel List.iter *)
-  val pariter: ?preserve:bool -> ?core_pin:bool -> int -> ?csize:int ->
+  val pariter: ?preserve:bool -> ?core_pin:bool -> ?csize:int -> int ->
     ('a -> unit) -> 'a list -> unit
 
   (** Parallel List.fold *)
-  val parfold: ?preserve:bool -> ?core_pin:bool -> int -> ?csize:int ->
+  val parfold: ?preserve:bool -> ?core_pin:bool -> ?csize:int -> int ->
     ('a -> 'b) -> ('c -> 'b -> 'c) -> 'c -> 'a list -> 'c
 end
