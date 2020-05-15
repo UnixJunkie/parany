@@ -161,18 +161,17 @@ let imux (mux: 'b -> unit) =
       (* put somewhere into the pile *)
       Ht.add wait_list i res
 
-let run
-    ?(preserve = false)
-    ?(core_pin = false)
-    ?csize:(cs = 1)
-    nprocs ~demux ~work ~mux =
-  let main_work_loop (type a b) ~(demux : unit -> a) ~(work : a -> b) ~(mux : b -> unit) : unit =
+let run ?(preserve = false) ?(core_pin = false) ?(csize = 1) nprocs
+    ~demux ~work ~mux =
+  let demux_work_mux (type a b)
+      ~(demux: unit -> a) ~(work: a -> b) ~(mux: b -> unit): unit =
+    (* create queues *)
     let jobs_in, jobs_out = Shm.init () in
     let res_in, res_out = Shm.init () in
     (* start feeder *)
     (* eprintf "father(%d) starting feeder\n%!" pid; *)
     Gc.compact (); (* like parmap: reclaim memory prior to forking *)
-    fork_out (fun () -> feed_them_all cs nprocs demux jobs_in);
+    fork_out (fun () -> feed_them_all csize nprocs demux jobs_in);
     (* start workers *)
     for worker_rank = 0 to nprocs - 1 do
       (* eprintf "father(%d) starting a worker\n%!" pid; *)
@@ -191,9 +190,10 @@ let run
           (* eprintf "father(%d) collecting one\n%!" pid; *)
           List.iter mux xs
         done
-      with End_of_input ->
-        incr finished
+      with End_of_input -> incr finished
     done;
+    (* free resources *)
+    List.iter Unix.close [jobs_in; jobs_out; res_in; res_out]
   in
   if nprocs <= 1 then
     (* sequential version *)
@@ -204,28 +204,26 @@ let run
     with End_of_input -> ()
   else
     begin
-      assert(cs >= 1);
+      (* parallel version *)
+      assert(csize >= 1);
       let max_cores = Cpu.numcores () in
       assert(nprocs <= max_cores);
-      (* parallel version *)
       (* let pid = Unix.getpid () in
        * eprintf "father(%d) started\n%!" pid; *)
-      (* create queues *)
-      let jobs_in, jobs_out = Shm.init () in
-      let res_in, res_out = Shm.init () in
-      if not preserve then
-        (* to maximize parallel efficiency, by default we don't care about the
-           order in which jobs are computed. *)
-        main_work_loop ~demux ~work ~mux
-      else
-        (* However, in some cases, it is necessary for the user to preserve the
-           input order in the output. In this case, we still compute things
-           potentially out of order (for parallelization efficiency); but we will
-           order back the results in input order (for user's convenience) *)
-        main_work_loop ~demux:(idemux demux) ~work:(iwork work) ~mux:(imux mux);
+      (if preserve then
+         (* In some cases, it is necessary for the user to preserve the
+            input order in the output. In this case, we still compute things
+            potentially out of order (for parallelization efficiency);
+            but we will order back the results in input order
+            (for user's convenience) *)
+         demux_work_mux
+           ~demux:(idemux demux) ~work:(iwork work) ~mux:(imux mux)
+       else
+         (* by default, to maximize parallel efficiency we don't care about the
+            order in which jobs are computed. *)
+         demux_work_mux ~demux ~work ~mux
+      );
       (* eprintf "father(%d) finished\n%!" pid; *)
-      (* free resources *)
-      List.iter Unix.close [jobs_in; jobs_out; res_in; res_out]
     end
 
 (* Wrapper for near-compatibility with Parmap *)
