@@ -180,11 +180,6 @@ let run
       assert(nprocs <= max_cores);
       (* to maximize parallel efficiency, by default we don't care about the
          order in which jobs are computed. *)
-      let module Dis = struct
-        let demux = demux
-        let work = work
-        let mux = mux
-      end in
       (* However, in some cases, it is necessary for the user to preserve the
          input order in the output. In this case, we still compute things
          potentially out of order (for parallelization efficiency); but we will
@@ -233,13 +228,13 @@ let run
           (* start feeder *)
           (* eprintf "father(%d) starting feeder\n%!" pid; *)
           Gc.compact (); (* like parmap: reclaim memory prior to forking *)
-          fork_out (fun () -> feed_them_all cs nprocs Dis.demux jobs_in);
+          fork_out (fun () -> feed_them_all cs nprocs demux jobs_in);
           (* start workers *)
           for worker_rank = 0 to nprocs - 1 do
             (* eprintf "father(%d) starting a worker\n%!" pid; *)
             fork_out (fun () ->
                 if core_pin then Cpu.setcore worker_rank;
-                go_to_work jobs_out Dis.work res_in
+                go_to_work jobs_out work res_in
               )
           done;
           (* collect results *)
@@ -250,7 +245,7 @@ let run
               while true do
                 let xs = Shm.receive res_out buff in
                 (* eprintf "father(%d) collecting one\n%!" pid; *)
-                List.iter Dis.mux xs
+                List.iter mux xs
               done
             with End_of_input ->
               incr finished
