@@ -166,6 +166,35 @@ let run
     ?(core_pin = false)
     ?csize:(cs = 1)
     nprocs ~demux ~work ~mux =
+  let main_work_loop (type a b) ~(demux : unit -> a) ~(work : a -> b) ~(mux : b -> unit) : unit =
+    let jobs_in, jobs_out = Shm.init () in
+    let res_in, res_out = Shm.init () in
+    (* start feeder *)
+    (* eprintf "father(%d) starting feeder\n%!" pid; *)
+    Gc.compact (); (* like parmap: reclaim memory prior to forking *)
+    fork_out (fun () -> feed_them_all cs nprocs demux jobs_in);
+    (* start workers *)
+    for worker_rank = 0 to nprocs - 1 do
+      (* eprintf "father(%d) starting a worker\n%!" pid; *)
+      fork_out (fun () ->
+          if core_pin then Cpu.setcore worker_rank;
+          go_to_work jobs_out work res_in
+        )
+    done;
+    (* collect results *)
+    let finished = ref 0 in
+    let buff = Bytes.create 80 in
+    while !finished < nprocs do
+      try
+        while true do
+          let xs = Shm.receive res_out buff in
+          (* eprintf "father(%d) collecting one\n%!" pid; *)
+          List.iter mux xs
+        done
+      with End_of_input ->
+        incr finished
+    done;
+  in
   if nprocs <= 1 then
     (* sequential version *)
     try
@@ -178,84 +207,22 @@ let run
       assert(cs >= 1);
       let max_cores = Cpu.numcores () in
       assert(nprocs <= max_cores);
-      (* to maximize parallel efficiency, by default we don't care about the
-         order in which jobs are computed. *)
-      let module Dis = struct
-        let demux = demux
-        let work = work
-        let mux = mux
-      end in
-      (* However, in some cases, it is necessary for the user to preserve the
-         input order in the output. In this case, we still compute things
-         potentially out of order (for parallelization efficiency); but we will
-         order back the results in input order (for user's convenience) *)
-      let module Ord = struct
-        let demux = idemux demux
-        let work = iwork work
-        let mux = imux mux
-      end in
       (* parallel version *)
       (* let pid = Unix.getpid () in
        * eprintf "father(%d) started\n%!" pid; *)
       (* create queues *)
       let jobs_in, jobs_out = Shm.init () in
       let res_in, res_out = Shm.init () in
-      if preserve then
-        begin
-          (* start feeder *)
-          (* eprintf "father(%d) starting feeder\n%!" pid; *)
-          Gc.compact (); (* like parmap: reclaim memory prior to forking *)
-          fork_out (fun () -> feed_them_all cs nprocs Ord.demux jobs_in);
-          (* start workers *)
-          for worker_rank = 0 to nprocs - 1 do
-            (* eprintf "father(%d) starting a worker\n%!" pid; *)
-            fork_out (fun () ->
-                if core_pin then Cpu.setcore worker_rank;
-                go_to_work jobs_out Ord.work res_in
-              )
-          done;
-          (* collect results *)
-          let finished = ref 0 in
-          let buff = Bytes.create 80 in
-          while !finished < nprocs do
-            try
-              while true do
-                let xs = Shm.receive res_out buff in
-                (* eprintf "father(%d) collecting one\n%!" pid; *)
-                List.iter Ord.mux xs
-              done
-            with End_of_input ->
-              incr finished
-          done;
-        end
+      if not preserve then
+        (* to maximize parallel efficiency, by default we don't care about the
+           order in which jobs are computed. *)
+        main_work_loop ~demux ~work ~mux
       else
-        begin
-          (* start feeder *)
-          (* eprintf "father(%d) starting feeder\n%!" pid; *)
-          Gc.compact (); (* like parmap: reclaim memory prior to forking *)
-          fork_out (fun () -> feed_them_all cs nprocs Dis.demux jobs_in);
-          (* start workers *)
-          for worker_rank = 0 to nprocs - 1 do
-            (* eprintf "father(%d) starting a worker\n%!" pid; *)
-            fork_out (fun () ->
-                if core_pin then Cpu.setcore worker_rank;
-                go_to_work jobs_out Dis.work res_in
-              )
-          done;
-          (* collect results *)
-          let finished = ref 0 in
-          let buff = Bytes.create 80 in
-          while !finished < nprocs do
-            try
-              while true do
-                let xs = Shm.receive res_out buff in
-                (* eprintf "father(%d) collecting one\n%!" pid; *)
-                List.iter Dis.mux xs
-              done
-            with End_of_input ->
-              incr finished
-          done;
-        end;
+        (* However, in some cases, it is necessary for the user to preserve the
+           input order in the output. In this case, we still compute things
+           potentially out of order (for parallelization efficiency); but we will
+           order back the results in input order (for user's convenience) *)
+        main_work_loop ~demux:(idemux demux) ~work:(iwork work) ~mux:(imux mux);
       (* eprintf "father(%d) finished\n%!" pid; *)
       (* free resources *)
       List.iter Unix.close [jobs_in; jobs_out; res_in; res_out]
