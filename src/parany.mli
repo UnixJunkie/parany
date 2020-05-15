@@ -16,13 +16,16 @@ exception End_of_input
     Outputs of function [g] are consumed by function [h].
     Functions [f] and [g] are run by different unix processes.
     Function [g] is run by [nprocs] processes at the same time.
-    Only function [mux] is run by the same process that called
-    [Parany.run].
-    ~core_pin is an optional parameter which defaults to false.
-    Core pinning can improve performance but should not be used
-    on computers with many users or running several parany computations
-    at the same time. *)
+    Only function [mux] is run by the same process that called [Parany.run].
+    [~core_pin] is an optional parameter which defaults to false.
+    Core pinning can improve performance but should not be used on computers
+    with many users or running several parany computations at the same time.
+    [~preserve] is an optional parameter which defaults to false.
+    If set to true, results will be accumulated by [h] in the same
+    order that function [f] emitted them. However, for parallel performance
+    reasons, the jobs are still potentially computed by [g] out of order. *)
 val run:
+  ?preserve:bool ->
   ?core_pin:bool ->
   ?csize:int ->
   nprocs:int ->
@@ -34,14 +37,14 @@ val run:
 module Parmap: sig
 
   (** Parallel List.map *)
-  val parmap: ?core_pin:bool -> ncores:int -> ?csize:int ->
+  val parmap: ?preserve:bool -> ?core_pin:bool -> ncores:int -> ?csize:int ->
     ('a -> 'b) -> 'a list -> 'b list
 
   (** Parallel List.iter *)
-  val pariter: ?core_pin:bool -> ncores:int -> ?csize:int ->
+  val pariter: ?preserve:bool -> ?core_pin:bool -> ncores:int -> ?csize:int ->
     ('a -> unit) -> 'a list -> unit
 
   (** Parallel List.fold *)
-  val parfold: ?core_pin:bool -> ncores:int -> ?csize:int ->
+  val parfold: ?preserve:bool -> ?core_pin:bool -> ncores:int -> ?csize:int ->
     ('a -> 'b) -> ('c -> 'b -> 'c) -> 'c -> 'a list -> 'c
 end
