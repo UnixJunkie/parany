@@ -161,40 +161,40 @@ let imux (mux: 'b -> unit) =
       (* put somewhere into the pile *)
       Ht.add wait_list i res
 
+let demux_work_mux ~(core_pin: bool) ~(csize: int) (nprocs: int)
+    ~(demux: unit -> 'a) ~(work: 'a -> 'b) ~(mux: 'b -> unit): unit =
+  (* create queues *)
+  let jobs_in, jobs_out = Shm.init () in
+  let res_in, res_out = Shm.init () in
+  (* start feeder *)
+  (* eprintf "father(%d) starting feeder\n%!" pid; *)
+  Gc.compact (); (* like parmap: reclaim memory prior to forking *)
+  fork_out (fun () -> feed_them_all csize nprocs demux jobs_in);
+  (* start workers *)
+  for worker_rank = 0 to nprocs - 1 do
+    (* eprintf "father(%d) starting a worker\n%!" pid; *)
+    fork_out (fun () ->
+        if core_pin then Cpu.setcore worker_rank;
+        go_to_work jobs_out work res_in
+      )
+  done;
+  (* collect results *)
+  let finished = ref 0 in
+  let buff = Bytes.create 80 in
+  while !finished < nprocs do
+    try
+      while true do
+        let xs = Shm.receive res_out buff in
+        (* eprintf "father(%d) collecting one\n%!" pid; *)
+        List.iter mux xs
+      done
+    with End_of_input -> incr finished
+  done;
+  (* free resources *)
+  List.iter Unix.close [jobs_in; jobs_out; res_in; res_out]
+
 let run ?(preserve = false) ?(core_pin = false) ?(csize = 1) nprocs
     ~demux ~work ~mux =
-  let demux_work_mux (type a b)
-      ~(demux: unit -> a) ~(work: a -> b) ~(mux: b -> unit): unit =
-    (* create queues *)
-    let jobs_in, jobs_out = Shm.init () in
-    let res_in, res_out = Shm.init () in
-    (* start feeder *)
-    (* eprintf "father(%d) starting feeder\n%!" pid; *)
-    Gc.compact (); (* like parmap: reclaim memory prior to forking *)
-    fork_out (fun () -> feed_them_all csize nprocs demux jobs_in);
-    (* start workers *)
-    for worker_rank = 0 to nprocs - 1 do
-      (* eprintf "father(%d) starting a worker\n%!" pid; *)
-      fork_out (fun () ->
-          if core_pin then Cpu.setcore worker_rank;
-          go_to_work jobs_out work res_in
-        )
-    done;
-    (* collect results *)
-    let finished = ref 0 in
-    let buff = Bytes.create 80 in
-    while !finished < nprocs do
-      try
-        while true do
-          let xs = Shm.receive res_out buff in
-          (* eprintf "father(%d) collecting one\n%!" pid; *)
-          List.iter mux xs
-        done
-      with End_of_input -> incr finished
-    done;
-    (* free resources *)
-    List.iter Unix.close [jobs_in; jobs_out; res_in; res_out]
-  in
   if nprocs <= 1 then
     (* sequential version *)
     try
@@ -216,12 +216,13 @@ let run ?(preserve = false) ?(core_pin = false) ?(csize = 1) nprocs
             potentially out of order (for parallelization efficiency);
             but we will order back the results in input order
             (for user's convenience) *)
-         demux_work_mux
+         demux_work_mux ~core_pin ~csize nprocs
            ~demux:(idemux demux) ~work:(iwork work) ~mux:(imux mux)
        else
          (* by default, to maximize parallel efficiency we don't care about the
             order in which jobs are computed. *)
-         demux_work_mux ~demux ~work ~mux
+         demux_work_mux ~core_pin ~csize nprocs
+           ~demux ~work ~mux
       );
       (* eprintf "father(%d) finished\n%!" pid; *)
     end
