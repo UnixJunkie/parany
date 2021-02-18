@@ -28,6 +28,15 @@ let bool_of_string = function
   | "1" -> true
   | x -> failwith (sprintf "Test.bool_of_string: %s neither 0 nor 1" x)
 
+let rank = ref (-1)
+
+let hello i =
+  rank := i;
+  eprintf "I am %d\n%!" i
+
+let goodbye () =
+  eprintf "Goodbye from %d\n%!" !rank
+
 let main () =
   let argc = Array.length Sys.argv in
   if argc <> 4 then
@@ -37,9 +46,11 @@ let main () =
   let csize = int_of_string Sys.argv.(2) in
   let preserve = bool_of_string Sys.argv.(3) in
   (* Parany.set_core_pinning true; *)
-  (if preserve
-   then Parany.run ~preserve:true ~csize:csize nprocs ~demux ~work ~mux
-   else Parany.run ~csize:csize nprocs ~demux ~work ~mux);
+  (if preserve then
+     (* we test init/finalize only with preserve *)
+     Parany.run ~init:hello ~finalize:goodbye ~preserve:true ~csize:csize nprocs ~demux ~work ~mux
+   else
+     Parany.run ~csize:csize nprocs ~demux ~work ~mux);
   for i = 0 to n - 1 do
     Printf.printf "%d\n" results.(i)
   done

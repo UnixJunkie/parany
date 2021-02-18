@@ -24,8 +24,15 @@ exception End_of_input
     [~preserve] is an optional parameter which defaults to false.
     If set to true, results will be accumulated by [h] in the same
     order that function [f] emitted them. However, for parallel performance
-    reasons, the jobs are still potentially computed by [g] out of order. *)
+    reasons, the jobs are still potentially computed by [g] out of order.
+    The optional [init] (resp. [finalize]) function is called once
+    by each child process just after creation (resp. just before exit).
+    [init] and [finalize] both default to doing nothing.
+    [init i] takes the child rank [i] as parameter
+    (first forked child process has rank 0, next 1, etc.). *)
 val run:
+  ?init:(int -> unit) ->
+  ?finalize:(unit -> unit) ->
   ?preserve:bool ->
   ?core_pin:bool ->
   ?csize:int ->
@@ -38,14 +45,18 @@ val run:
 module Parmap: sig
 
   (** Parallel List.map *)
-  val parmap: ?preserve:bool -> ?core_pin:bool -> ?csize:int -> int ->
+  val parmap: ?init:(int -> unit) -> ?finalize:(unit -> unit) ->
+    ?preserve:bool -> ?core_pin:bool -> ?csize:int -> int ->
     ('a -> 'b) -> 'a list -> 'b list
 
   (** Parallel List.iter *)
-  val pariter: ?preserve:bool -> ?core_pin:bool -> ?csize:int -> int ->
+  val pariter: ?init:(int -> unit) -> ?finalize:(unit -> unit) ->
+    ?preserve:bool -> ?core_pin:bool -> ?csize:int -> int ->
     ('a -> unit) -> 'a list -> unit
 
   (** Parallel List.fold *)
-  val parfold: ?preserve:bool -> ?core_pin:bool -> ?csize:int -> int ->
-    ('a -> 'b) -> ('c -> 'b -> 'c) -> 'c -> 'a list -> 'c
+  val parfold: ?init:(int -> unit) -> ?finalize:(unit -> unit) ->
+    ?preserve:bool -> ?core_pin:bool -> ?csize:int -> int ->
+    ('a -> 'b) -> ('acc -> 'b -> 'acc) -> 'acc -> 'a list -> 'acc
+
 end
