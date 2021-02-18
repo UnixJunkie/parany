@@ -161,7 +161,8 @@ let imux (mux: 'b -> unit) =
       (* put somewhere into the pile *)
       Ht.add wait_list i res
 
-let run ?(preserve = false) ?(core_pin = false) ?(csize = 1) nprocs
+let run ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
+    ?(preserve = false) ?(core_pin = false) ?(csize = 1) nprocs
     ~demux ~work ~mux =
   let demux_work_mux (type a b)
       ~(demux: unit -> a) ~(work: a -> b) ~(mux: b -> unit): unit =
@@ -176,6 +177,10 @@ let run ?(preserve = false) ?(core_pin = false) ?(csize = 1) nprocs
     for worker_rank = 0 to nprocs - 1 do
       (* eprintf "father(%d) starting a worker\n%!" pid; *)
       fork_out (fun () ->
+          init worker_rank; (* per-process optional setup *)
+          at_exit finalize; (* register optional finalize fun *)
+          (* parmap also does core pinning _after_ having called
+             the per-process init function *)
           if core_pin then Cpu.setcore worker_rank;
           go_to_work jobs_out work res_in
         )
@@ -232,7 +237,8 @@ module Parmap = struct
   let tail_rec_map f l =
     List.rev (List.rev_map f l)
 
-  let parmap ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores f l =
+  let parmap ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
+      ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores f l =
     if ncores <= 1 then tail_rec_map f l
     else
       let input = ref l in
@@ -243,10 +249,11 @@ module Parmap = struct
       let mux x =
         output := x :: !output in
       (* parallel work *)
-      run ~preserve ~core_pin ~csize ncores ~demux ~work:f ~mux;
+      run ~init ~finalize ~preserve ~core_pin ~csize ncores ~demux ~work:f ~mux;
       !output
 
-  let pariter ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores f l =
+  let pariter ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
+      ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores f l =
     if ncores <= 1 then List.iter f l
     else
       let input = ref l in
@@ -254,20 +261,22 @@ module Parmap = struct
         | [] -> raise End_of_input
         | x :: xs -> (input := xs; x) in
       (* parallel work *)
-      run ~preserve ~core_pin ~csize ncores ~demux ~work:f ~mux:ignore
+      run ~init ~finalize ~preserve ~core_pin ~csize ncores ~demux ~work:f ~mux:ignore
 
-  let parfold ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores
-      f g init l =
-    if ncores <= 1 then List.fold_left g init (tail_rec_map f l)
+  let parfold ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
+      ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores
+      f g init_acc l =
+    if ncores <= 1 then
+      List.fold_left (fun acc x -> g acc (f x)) init_acc l
     else
       let input = ref l in
       let demux () = match !input with
         | [] -> raise End_of_input
         | x :: xs -> (input := xs; x) in
-      let output = ref init in
+      let output = ref init_acc in
       let mux x =
         output := g !output x in
       (* parallel work *)
-      run ~preserve ~core_pin ~csize ncores ~demux ~work:f ~mux;
+      run ~init ~finalize ~preserve ~core_pin ~csize ncores ~demux ~work:f ~mux;
       !output
 end
