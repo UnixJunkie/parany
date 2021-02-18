@@ -94,12 +94,11 @@ let feed_them_all csize ncores demux queue =
     end
 
 (* worker process loop *)
-let go_to_work jobs_queue work results_queue =
+let go_to_work prfx jobs_queue work results_queue =
   (* let pid = Unix.getpid () in
    * eprintf "worker(%d) started\n%!" pid; *)
-  let out_count = ref 0 in
-  let prfx = Filename.temp_file "oparany_" "" in
   try
+    let out_count = ref 0 in
     let buff = Bytes.create 80 in
     while true do
       let xs = Shm.receive jobs_queue buff in
@@ -110,13 +109,10 @@ let go_to_work jobs_queue work results_queue =
       incr out_count
     done
   with End_of_input ->
-    begin
-      (* tell collector to stop *)
-      (* eprintf "worker(%d) finished\n%!" pid; *)
-      Sys.remove prfx;
-      Shm.raw_send results_queue "EOF";
-      Unix.close results_queue
-    end
+    (* resource cleanup was moved to an at_exit-registered function,
+       so that cleanup is done even in the case of an uncaught exception
+       and the muxer doesn't enter an infinite loop *)
+    ()
 
 let fork_out f =
   match Unix.fork () with
@@ -182,7 +178,15 @@ let run ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
           (* parmap also does core pinning _after_ having called
              the per-process init function *)
           if core_pin then Cpu.setcore worker_rank;
-          go_to_work jobs_out work res_in
+          let prfx = Filename.temp_file "oparany_" "" in
+          at_exit (fun () ->
+              (* tell collector to stop *)
+              (* eprintf "worker(%d) finished\n%!" pid; *)
+              Shm.raw_send res_in "EOF";
+              Unix.close res_in;
+              Sys.remove prfx
+            );
+          go_to_work prfx jobs_out work res_in
         )
     done;
     (* collect results *)
