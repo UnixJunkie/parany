@@ -13,9 +13,6 @@ let demux () =
     incr counter;
     res
 
-let work a =
-  a
-
 let res_counter = ref 0
 let results = Array.make n 0
 
@@ -36,6 +33,10 @@ let hello i =
 
 let goodbye () =
   eprintf "Goodbye from %d\n%!" !rank
+
+let work a =
+  (* if !rank = 8 then failwith "Worker 8 on strike" else *)
+  a
 
 let main () =
   let argc = Array.length Sys.argv in
