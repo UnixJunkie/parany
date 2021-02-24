@@ -13,4 +13,4 @@
 (alias
   (name runtest)
   (action
-  (run ./test.exe 16 800 0)))
+  (run ./test.exe %{jobs} 800 0)))
