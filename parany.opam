@@ -13,9 +13,7 @@ depends: [
 ]
 build: [
   ["dune" "build" "-p" name "-j" jobs]
-# the test exe doesn't run in the CI env. of the opam-repository
-# probably because processes are limited to one core, I guess
-# ["dune" "runtest" "-p" name "-j" jobs] {with-test}
+  ["dune" "runtest" "-p" name "-j" jobs] {with-test}
 ]
 synopsis: "Parallelize any computation"
 description: """
@@ -42,8 +40,3 @@ THAT IS NEVER SUPPOSED TO CRASH IS NOT ADVIZED.
 WHILE THIS LIBRARY IS HIGH PERFORMANCE, IT IS ALSO DANGEROUS.
 USE AT YOUR OWN RISKS.
 """
-#url {
-#  src: "https://github.com/UnixJunkie/parany/archive/vXXX.tar.gz"
-#  checksum: "md5=YYY"
-#  ]
-#}
