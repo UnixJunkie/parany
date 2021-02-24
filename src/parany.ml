@@ -160,6 +160,7 @@ let imux (mux: 'b -> unit) =
 let run ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
     ?(preserve = false) ?(core_pin = false) ?(csize = 1) nprocs
     ~demux ~work ~mux =
+  (* the (type a b) annotation unfortunately implies OCaml >= 4.03.0 *)
   let demux_work_mux (type a b)
       ~(demux: unit -> a) ~(work: a -> b) ~(mux: b -> unit): unit =
     (* create queues *)
@@ -283,4 +284,19 @@ module Parmap = struct
       (* parallel work *)
       run ~init ~finalize ~preserve ~core_pin ~csize ncores ~demux ~work:f ~mux;
       !output
+
+  (* let parfold_compat
+   *     ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
+   *     ?(ncores: int option) ?(chunksize: int option) (f: 'a -> 'b -> 'b)
+   *     (l: 'a list) (init_acc: 'b) (acc_fun: 'b -> 'b -> 'b): 'b =
+   *   let nprocs = match ncores with
+   *     | None -> 1 (\* if the user doesn't know the number of cores to use,
+   *                    we don't know better *\)
+   *     | Some x -> x in
+   *   let csize = match chunksize with
+   *     | None -> 1
+   *     | Some x -> x in
+   *   parfold ~init ~finalize ~preserve:false ~core_pin:false ~csize nprocs
+   *     (fun x -> f x init_acc) acc_fun init_acc l *)
+
 end

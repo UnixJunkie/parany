@@ -59,4 +59,8 @@ module Parmap: sig
     ?preserve:bool -> ?core_pin:bool -> ?csize:int -> int ->
     ('a -> 'b) -> ('acc -> 'b -> 'acc) -> 'acc -> 'a list -> 'acc
 
+  (* val parfold_compat: ?init:(int -> unit) -> ?finalize:(unit -> unit) ->
+   *   ?ncores:int -> ?chunksize:int -> ('a -> 'b -> 'b) -> 'a list ->
+   *   'b -> ('b -> 'b -> 'b) -> 'b *)
+
 end
