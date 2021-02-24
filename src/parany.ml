@@ -296,7 +296,25 @@ module Parmap = struct
    *   let csize = match chunksize with
    *     | None -> 1
    *     | Some x -> x in
-   *   parfold ~init ~finalize ~preserve:false ~core_pin:false ~csize nprocs
-   *     (fun x -> f x init_acc) acc_fun init_acc l *)
+   *   if nprocs <= 1 then
+   *     List.fold_left (fun acc x -> f x acc) init_acc l
+   *   else
+   *     let input = ref l in
+   *     let demux () = match !input with
+   *       | [] -> raise End_of_input
+   *       | _ ->
+   *         let this_chunk, rest = BatList.takedrop csize !input in
+   *         input := rest;
+   *         this_chunk in
+   *     let work xs =
+   *       List.fold_left (fun acc x -> f x acc) init_acc xs in
+   *     let output = ref init_acc in
+   *     let mux x =
+   *       output := acc_fun !output x in
+   *     (\* parallel work *\)
+   *     run ~init ~finalize
+   *       (\* leave csize=1 bellow *\)
+   *       ~preserve:false ~core_pin:false ~csize:1 nprocs ~demux ~work ~mux;
+   *     !output *)
 
 end
