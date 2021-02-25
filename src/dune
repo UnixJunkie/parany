@@ -9,10 +9,3 @@
   (names test)
   (modules test)
   (libraries parany unix))
-
-;; the real way to regression test this library is to run
-;; ./test.sh, which uses test.exe declared just above
-;(alias
-;  (name runtest)
-;  (action
-;  (run ./test.exe 16 800 0)))
