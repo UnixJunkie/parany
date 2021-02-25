@@ -9,11 +9,11 @@ depends: [
   "base-unix"
   "cpu"
   "dune" {>= "1.6.0"}
-  "ocaml"
+  "ocaml" {>= "4.03.0"}
 ]
 build: [
   ["dune" "build" "-p" name "-j" jobs]
-  ["dune" "build" "src/test.exe"] {with-test}
+  ["dune" "build" "-p" name "-j" jobs "src/test.exe"] {with-test}
   ["./test.sh"] {with-test}
 ]
 synopsis: "Parallelize any computation"
@@ -41,3 +41,8 @@ THAT IS NEVER SUPPOSED TO CRASH IS NOT ADVIZED.
 WHILE THIS LIBRARY IS HIGH PERFORMANCE, IT IS ALSO DANGEROUS.
 USE AT YOUR OWN RISKS.
 """
+#url {
+#  src: "https://github.com/UnixJunkie/parany/archive/vXXX.tar.gz"
+#  checksum: "md5=YYY"
+#}
+
