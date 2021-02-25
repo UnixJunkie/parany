@@ -168,6 +168,7 @@ let run ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
     let res_in, res_out = Shm.init () in
     (* start feeder *)
     (* eprintf "father(%d) starting feeder\n%!" pid; *)
+    flush_all (); (* prevent duplicated I/O *)
     Gc.compact (); (* like parmap: reclaim memory prior to forking *)
     fork_out (fun () -> feed_them_all csize nprocs demux jobs_in);
     (* start workers *)
