@@ -244,6 +244,17 @@ module Parmap = struct
   let tail_rec_map f l =
     List.rev (List.rev_map f l)
 
+  let tail_rec_mapi f l =
+    let i = ref 0 in
+    let res =
+      List.rev_map (fun x ->
+          let j = !i in
+          let y = f j x in
+          incr i;
+          y
+        ) l in
+    List.rev res
+
   let parmap ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
       ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores f l =
     if ncores <= 1 then tail_rec_map f l
@@ -257,6 +268,31 @@ module Parmap = struct
         output := x :: !output in
       (* parallel work *)
       run ~init ~finalize ~preserve ~core_pin ~csize ncores ~demux ~work:f ~mux;
+      !output
+
+  let parmapi ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
+      ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores f l =
+    if ncores <= 1 then tail_rec_mapi f l
+    else
+      let input = ref l in
+      let i = ref 0 in
+      let demux () =
+        match !input with
+        | [] -> raise End_of_input
+        | x :: xs ->
+          begin
+            let j = !i in
+            input := xs;
+            let res = (j, x) in
+            incr i;
+            res
+          end in
+      let output = ref [] in
+      let f' (i, x) = f i x in
+      let mux x =
+        output := x :: !output in
+      (* parallel work *)
+      run ~init ~finalize ~preserve ~core_pin ~csize ncores ~demux ~work:f' ~mux;
       !output
 
   let pariter ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())

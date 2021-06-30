@@ -49,6 +49,11 @@ module Parmap: sig
     ?preserve:bool -> ?core_pin:bool -> ?csize:int -> int ->
     ('a -> 'b) -> 'a list -> 'b list
 
+  (** Parallel List.mapi *)
+  val parmapi: ?init:(int -> unit) -> ?finalize:(unit -> unit) ->
+    ?preserve:bool -> ?core_pin:bool -> ?csize:int -> int ->
+    (int -> 'a -> 'b) -> 'a list -> 'b list
+  
   (** Parallel List.iter *)
   val pariter: ?init:(int -> unit) -> ?finalize:(unit -> unit) ->
     ?preserve:bool -> ?core_pin:bool -> ?csize:int -> int ->
