@@ -1,5 +1,6 @@
 
 open Printf
+module A = Array
 module Fn = Filename
 module Ht = Hashtbl
 
@@ -285,6 +286,29 @@ module Parmap = struct
       (* parallel work *)
       run ~init ~finalize ~preserve ~core_pin ~csize ncores ~demux ~work:f ~mux;
       !output
+
+  (* preserves array input order *)
+  let array_parmap
+      ?(init = fun (_rank: int) -> ())
+      ?(finalize = fun () -> ())
+      ?(core_pin = false) ncores f init_acc a =
+    let n = A.length a in
+    let res = A.make n init_acc in
+    run ~init ~finalize
+      ~preserve:false (* input-order is preserved explicitely below *)
+      ~core_pin ~csize:1 ncores
+      ~demux:(
+        let in_count = ref 0 in
+        fun () ->
+          if !in_count = n then
+            raise End_of_input
+          else
+            let i = !in_count in
+            incr in_count;
+            i)
+      ~work:(fun i -> (i, f (A.unsafe_get a i)))
+      ~mux:(fun (i, y) -> A.unsafe_set res i y);
+    res
 
   (* let parfold_compat
    *     ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())

@@ -59,6 +59,10 @@ module Parmap: sig
     ?preserve:bool -> ?core_pin:bool -> ?csize:int -> int ->
     ('a -> 'b) -> ('acc -> 'b -> 'acc) -> 'acc -> 'a list -> 'acc
 
+  (** Parallel Array.map; array input order is always preserved. *)
+  val array_parmap: ?init:(int -> unit) -> ?finalize:(unit -> unit) ->
+    ?core_pin:bool -> int -> ('a -> 'b) -> 'b -> 'a array -> 'b array
+
   (* val parfold_compat: ?init:(int -> unit) -> ?finalize:(unit -> unit) ->
    *   ?ncores:int -> ?chunksize:int -> ('a -> 'b -> 'b) -> 'a list ->
    *   'b -> ('b -> 'b -> 'b) -> 'b *)
