@@ -19,7 +19,7 @@ module Shm = struct
 
   let marshal_to_file fn v =
     let out = open_out_bin fn in
-    Marshal.to_channel out v [Marshal.No_sharing];
+    Marshal.to_channel out v Marshal.[No_sharing; Closures];
     close_out out
 
   let rec send_loop sock buff n =
