@@ -1,4 +1,5 @@
 
+module A = Array
 module Dom = Domainslib
 module Chan = Dom.Chan
 module Ht = Hashtbl
@@ -148,3 +149,113 @@ let run ?(preserve = false) ?(csize = 1) (nprocs: int) ~demux ~work ~mux =
         Domain.join demuxer;
         Array.iter Domain.join workers
     end
+
+(* Wrapper for near-compatibility with Parmap *)
+module Parmap = struct
+
+  let tail_rec_map f l =
+    List.rev (List.rev_map f l)
+
+  let tail_rec_mapi f l =
+    let i = ref 0 in
+    let res =
+      List.rev_map (fun x ->
+          let j = !i in
+          let y = f j x in
+          incr i;
+          y
+        ) l in
+    List.rev res
+
+  let parmap ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
+      ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores f l =
+    if ncores <= 1 then tail_rec_map f l
+    else
+      let input = ref l in
+      let demux () = match !input with
+        | [] -> raise End_of_input
+        | x :: xs -> (input := xs; x) in
+      let output = ref [] in
+      let mux x =
+        output := x :: !output in
+      (* parallel work *)
+      run ~init ~finalize ~preserve ~core_pin ~csize ncores ~demux ~work:f ~mux;
+      !output
+
+  let parmapi ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
+      ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores f l =
+    if ncores <= 1 then tail_rec_mapi f l
+    else
+      let input = ref l in
+      let i = ref 0 in
+      let demux () =
+        match !input with
+        | [] -> raise End_of_input
+        | x :: xs ->
+          begin
+            let j = !i in
+            input := xs;
+            let res = (j, x) in
+            incr i;
+            res
+          end in
+      let output = ref [] in
+      let f' (i, x) = f i x in
+      let mux x =
+        output := x :: !output in
+      (* parallel work *)
+      run ~init ~finalize ~preserve ~core_pin ~csize ncores ~demux ~work:f' ~mux;
+      !output
+
+  let pariter ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
+      ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores f l =
+    if ncores <= 1 then List.iter f l
+    else
+      let input = ref l in
+      let demux () = match !input with
+        | [] -> raise End_of_input
+        | x :: xs -> (input := xs; x) in
+      (* parallel work *)
+      run ~init ~finalize ~preserve ~core_pin ~csize ncores ~demux ~work:f ~mux:ignore
+
+  let parfold ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
+      ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores
+      f g init_acc l =
+    if ncores <= 1 then
+      List.fold_left (fun acc x -> g acc (f x)) init_acc l
+    else
+      let input = ref l in
+      let demux () = match !input with
+        | [] -> raise End_of_input
+        | x :: xs -> (input := xs; x) in
+      let output = ref init_acc in
+      let mux x =
+        output := g !output x in
+      (* parallel work *)
+      run ~init ~finalize ~preserve ~core_pin ~csize ncores ~demux ~work:f ~mux;
+      !output
+
+  (* preserves array input order *)
+  let array_parmap
+      ?(init = fun (_rank: int) -> ())
+      ?(finalize = fun () -> ())
+      ?(core_pin = false) ncores f init_acc a =
+    let n = A.length a in
+    let res = A.make n init_acc in
+    run ~init ~finalize
+      ~preserve:false (* input-order is preserved explicitely below *)
+      ~core_pin ~csize:1 ncores
+      ~demux:(
+        let in_count = ref 0 in
+        fun () ->
+          if !in_count = n then
+            raise End_of_input
+          else
+            let i = !in_count in
+            incr in_count;
+            i)
+      ~work:(fun i -> (i, f (A.unsafe_get a i)))
+      ~mux:(fun (i, y) -> A.unsafe_set res i y);
+    res
+
+end
