@@ -49,7 +49,7 @@ let main () =
   (* Parany.set_core_pinning true; *)
   (if preserve then
      (* we test init/finalize only with preserve *)
-     Parany.run ~init:hello ~finalize:goodbye ~preserve:true ~csize:csize nprocs ~demux ~work ~mux
+     Parany.run ~preserve:true ~csize:csize nprocs ~demux ~work ~mux
    else
      Parany.run ~csize:csize nprocs ~demux ~work ~mux);
   for i = 0 to n - 1 do
