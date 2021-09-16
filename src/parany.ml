@@ -63,25 +63,31 @@ let run ?(preserve = false) ?(csize = 1) (nprocs: int) ~demux ~work ~mux =
   if csize > 1 then
     failwith "Parany.run: csize not supported";
   if nprocs <= 1 then
-    failwith "Parany.run: nprocs <= 1 not supported";
-  begin
-    (* nprocs workers + demuxer thread + muxer thread *)
-    let jobs = Chan.make_bounded (50 * nprocs) in
-    let results = Chan.make_bounded (50 * nprocs) in
-    (* launch the workers *)
-    let workers =
-      Array.init nprocs (fun _rank ->
-          Domain.spawn (fun _ ->
-              worker_loop jobs results work
-            )
+    (* no overhead sequential version *)
+    try
+      while true do
+        mux (work (demux ()))
+      done
+    with End_of_input -> ()
+  else
+    begin
+      (* nprocs workers + demuxer thread + muxer thread *)
+      let jobs = Chan.make_bounded (50 * nprocs) in
+      let results = Chan.make_bounded (50 * nprocs) in
+      (* launch the workers *)
+      let workers =
+        Array.init nprocs (fun _rank ->
+            Domain.spawn (fun _ ->
+                worker_loop jobs results work
+              )
+          ) in
+      (* launch the demuxer *)
+      let demuxer = Domain.spawn (fun _ ->
+          demuxer_loop nprocs jobs demux
         ) in
-    (* launch the demuxer *)
-    let demuxer = Domain.spawn (fun _ ->
-        demuxer_loop nprocs jobs demux
-      ) in
-    (* use the current thread to collect results (muxer) *)
-    muxer_loop nprocs results mux;
-    (* wait all threads *)
-    Domain.join demuxer;
-    Array.iter Domain.join workers
-  end
+      (* use the current thread to collect results (muxer) *)
+      muxer_loop nprocs results mux;
+      (* wait all threads *)
+      Domain.join demuxer;
+      Array.iter Domain.join workers
+    end
