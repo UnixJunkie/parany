@@ -24,52 +24,11 @@ exception End_of_input
     [~preserve] is an optional parameter which defaults to false.
     If set to true, results will be accumulated by [h] in the same
     order that function [f] emitted them. However, for parallel performance
-    reasons, the jobs are still potentially computed by [g] out of order.
-    The optional [init] (resp. [finalize]) function is called once
-    by each child process just after creation (resp. just before exit).
-    [init] and [finalize] both default to doing nothing.
-    [init i] takes the child rank [i] as parameter
-    (first forked child process has rank 0, next 1, etc.). *)
+    reasons, the jobs are still potentially computed by [g] out of order. *)
 val run:
-  ?init:(int -> unit) ->
-  ?finalize:(unit -> unit) ->
   ?preserve:bool ->
-  ?core_pin:bool ->
   ?csize:int ->
   int ->
   demux:(unit -> 'a) ->
   work:('a -> 'b) ->
   mux:('b -> unit) -> unit
-
-(** Wrapper module for near-compatibility with Parmap *)
-module Parmap: sig
-
-  (** Parallel List.map *)
-  val parmap: ?init:(int -> unit) -> ?finalize:(unit -> unit) ->
-    ?preserve:bool -> ?core_pin:bool -> ?csize:int -> int ->
-    ('a -> 'b) -> 'a list -> 'b list
-
-  (** Parallel List.mapi *)
-  val parmapi: ?init:(int -> unit) -> ?finalize:(unit -> unit) ->
-    ?preserve:bool -> ?core_pin:bool -> ?csize:int -> int ->
-    (int -> 'a -> 'b) -> 'a list -> 'b list
-  
-  (** Parallel List.iter *)
-  val pariter: ?init:(int -> unit) -> ?finalize:(unit -> unit) ->
-    ?preserve:bool -> ?core_pin:bool -> ?csize:int -> int ->
-    ('a -> unit) -> 'a list -> unit
-
-  (** Parallel List.fold *)
-  val parfold: ?init:(int -> unit) -> ?finalize:(unit -> unit) ->
-    ?preserve:bool -> ?core_pin:bool -> ?csize:int -> int ->
-    ('a -> 'b) -> ('acc -> 'b -> 'acc) -> 'acc -> 'a list -> 'acc
-
-  (** Parallel Array.map; array input order is always preserved. *)
-  val array_parmap: ?init:(int -> unit) -> ?finalize:(unit -> unit) ->
-    ?core_pin:bool -> int -> ('a -> 'b) -> 'b -> 'a array -> 'b array
-
-  (* val parfold_compat: ?init:(int -> unit) -> ?finalize:(unit -> unit) ->
-   *   ?ncores:int -> ?chunksize:int -> ('a -> 'b -> 'b) -> 'a list ->
-   *   'b -> ('b -> 'b -> 'b) -> 'b *)
-
-end

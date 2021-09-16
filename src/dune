@@ -2,10 +2,9 @@
 (library
   (name parany)
   (public_name parany)
-  (modules parany)
-  (libraries unix cpu))
+  (modules parany))
 
 (executables
   (names test)
   (modules test)
-  (libraries parany unix))
+  (libraries parany))
