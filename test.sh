@@ -12,10 +12,10 @@ diff <(seq 0 99999) \
 diff <(seq 0 99999) \
      <(_build/default/src/test.exe $NPROCS 1 0 2>/dev/null | sort -n)
 
-# parallel with csize = 1 and preserve
-# DO NOT IGNORE STDERR because testing init/finalize with preserve
-diff <(seq 0 99999) \
-     <(_build/default/src/test.exe $NPROCS 1 1)
+# # parallel with csize = 1 and preserve
+# # DO NOT IGNORE STDERR because testing init/finalize with preserve
+# diff <(seq 0 99999) \
+#      <(_build/default/src/test.exe $NPROCS 1 1)
 
 # sequential
 diff <(seq 0 99999) \
