@@ -150,6 +150,7 @@ let run ?(preserve = false) ?(csize = 1) (nprocs: int) ~demux ~work ~mux =
         Array.iter Domain.join workers
     end
 
+
 (* Wrapper for near-compatibility with Parmap *)
 module Parmap = struct
 
@@ -167,8 +168,8 @@ module Parmap = struct
         ) l in
     List.rev res
 
-  let parmap ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
-      ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores f l =
+  let parmap
+      ?(preserve = false) ?(csize = 1) ncores f l =
     if ncores <= 1 then tail_rec_map f l
     else
       let input = ref l in
@@ -179,11 +180,11 @@ module Parmap = struct
       let mux x =
         output := x :: !output in
       (* parallel work *)
-      run ~init ~finalize ~preserve ~core_pin ~csize ncores ~demux ~work:f ~mux;
+      run ~preserve ~csize ncores ~demux ~work:f ~mux;
       !output
 
-  let parmapi ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
-      ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores f l =
+  let parmapi
+      ?(preserve = false) ?(csize = 1) ncores f l =
     if ncores <= 1 then tail_rec_mapi f l
     else
       let input = ref l in
@@ -204,11 +205,11 @@ module Parmap = struct
       let mux x =
         output := x :: !output in
       (* parallel work *)
-      run ~init ~finalize ~preserve ~core_pin ~csize ncores ~demux ~work:f' ~mux;
+      run ~preserve ~csize ncores ~demux ~work:f' ~mux;
       !output
 
-  let pariter ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
-      ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores f l =
+  let pariter
+      ?(preserve = false) ?(csize = 1) ncores f l =
     if ncores <= 1 then List.iter f l
     else
       let input = ref l in
@@ -216,10 +217,11 @@ module Parmap = struct
         | [] -> raise End_of_input
         | x :: xs -> (input := xs; x) in
       (* parallel work *)
-      run ~init ~finalize ~preserve ~core_pin ~csize ncores ~demux ~work:f ~mux:ignore
+      run ~preserve ~csize ncores ~demux ~work:f ~mux:ignore
 
-  let parfold ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
-      ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores
+  let parfold
+      ?(preserve = false)
+      ?(csize = 1) ncores
       f g init_acc l =
     if ncores <= 1 then
       List.fold_left (fun acc x -> g acc (f x)) init_acc l
@@ -232,19 +234,16 @@ module Parmap = struct
       let mux x =
         output := g !output x in
       (* parallel work *)
-      run ~init ~finalize ~preserve ~core_pin ~csize ncores ~demux ~work:f ~mux;
+      run ~preserve ~csize ncores ~demux ~work:f ~mux;
       !output
 
   (* preserves array input order *)
-  let array_parmap
-      ?(init = fun (_rank: int) -> ())
-      ?(finalize = fun () -> ())
-      ?(core_pin = false) ncores f init_acc a =
+  let array_parmap ncores f init_acc a =
     let n = A.length a in
     let res = A.make n init_acc in
-    run ~init ~finalize
+    run
       ~preserve:false (* input-order is preserved explicitely below *)
-      ~core_pin ~csize:1 ncores
+      ~csize:1 ncores
       ~demux:(
         let in_count = ref 0 in
         fun () ->
