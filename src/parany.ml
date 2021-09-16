@@ -4,35 +4,38 @@ module Chan = Dom.Chan
 
 exception End_of_input
 
-type 'a work = Work of 'a
-             | No_work
-
-type 'b res = Res of 'b
-            | No_result
-
 let worker_loop jobs results work =
   let rec loop () =
     match Chan.recv jobs with
-    | No_work ->
+    | [||] ->
       (* signal muxer thread *)
-      Chan.send results No_result
-    | Work x ->
-      let y = work x in
-      Chan.send results (Res y);
+      Chan.send results [||]
+    | arr ->
+      let res = Array.map work arr in
+      Chan.send results res;
       loop () in
   loop ()
 
-let demuxer_loop nprocs jobs demux =
+let demuxer_loop nprocs jobs csize demux =
   let rec loop () =
+    let to_send = ref [] in
     try
-      let job = demux () in
-      Chan.send jobs (Work job);
+      for _i = 1 to csize do
+        to_send := (demux ()) :: !to_send
+      done;
+      let xs = Array.of_list (List.rev !to_send) in
+      Chan.send jobs xs;
       loop ()
     with End_of_input ->
       begin
+        if !to_send <> [] then
+          begin
+            let xs = Array.of_list (List.rev !to_send) in
+            Chan.send jobs xs
+          end;
         for _i = 1 to nprocs do
           (* signal each worker *)
-          Chan.send jobs No_work
+          Chan.send jobs [||]
         done
       end in
   loop ()
@@ -41,17 +44,15 @@ let muxer_loop nprocs results mux =
   let finished = ref 0 in
   let rec loop () =
     match Chan.recv results with
-    | No_result -> (* one worker finished *)
+    | [||] -> (* one worker finished *)
       begin
         incr finished;
-        if !finished = nprocs then
-          ()
-        else
-          loop ()
+        if !finished = nprocs then ()
+        else loop ()
       end
-    | Res x ->
+    | xs ->
       begin
-        mux x;
+        Array.iter mux xs;
         loop ()
       end
   in
@@ -60,8 +61,6 @@ let muxer_loop nprocs results mux =
 let run ?(preserve = false) ?(csize = 1) (nprocs: int) ~demux ~work ~mux =
   if preserve then
     failwith "Parany.run: preserve not supported";
-  if csize > 1 then
-    failwith "Parany.run: csize not supported";
   if nprocs <= 1 then
     (* no overhead sequential version *)
     try
@@ -83,7 +82,7 @@ let run ?(preserve = false) ?(csize = 1) (nprocs: int) ~demux ~work ~mux =
           ) in
       (* launch the demuxer *)
       let demuxer = Domain.spawn (fun _ ->
-          demuxer_loop nprocs jobs demux
+          demuxer_loop nprocs jobs csize demux
         ) in
       (* use the current thread to collect results (muxer) *)
       muxer_loop nprocs results mux;
