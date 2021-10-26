@@ -5,6 +5,7 @@ build:
 
 build-test: build
 	dune build src/test.exe
+	dune build src/test_parmap.exe
 
 clean:
 	rm -rf _build
