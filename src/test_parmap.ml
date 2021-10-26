@@ -1,5 +1,5 @@
 
-(* test preserve in Parany.Parmap *)
+(* test preserve parameter in Parany.Parmap.parmap{i} *)
 let main () =
   let input = [1;2;3;4;5;6;7;8] in
   let id x =
