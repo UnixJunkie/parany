@@ -269,7 +269,10 @@ module Parmap = struct
       (* parallel work *)
       run ~init ~finalize ~preserve ~core_pin ~csize ncores
         ~demux ~work:f ~mux;
-      !output
+      if preserve then
+        List.rev !output
+      else
+        !output
 
   let parmapi ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
       ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores f l =
@@ -295,7 +298,10 @@ module Parmap = struct
       (* parallel work *)
       run ~init ~finalize ~preserve ~core_pin ~csize ncores
         ~demux ~work:f' ~mux;
-      !output
+      if preserve then
+        List.rev !output
+      else
+        !output
 
   let pariter ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
       ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores f l =
