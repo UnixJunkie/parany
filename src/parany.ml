@@ -267,7 +267,8 @@ module Parmap = struct
       let mux x =
         output := x :: !output in
       (* parallel work *)
-      run ~init ~finalize ~preserve ~core_pin ~csize ncores ~demux ~work:f ~mux;
+      run ~init ~finalize ~preserve ~core_pin ~csize ncores
+        ~demux ~work:f ~mux;
       !output
 
   let parmapi ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
@@ -292,7 +293,8 @@ module Parmap = struct
       let mux x =
         output := x :: !output in
       (* parallel work *)
-      run ~init ~finalize ~preserve ~core_pin ~csize ncores ~demux ~work:f' ~mux;
+      run ~init ~finalize ~preserve ~core_pin ~csize ncores
+        ~demux ~work:f' ~mux;
       !output
 
   let pariter ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
@@ -304,7 +306,8 @@ module Parmap = struct
         | [] -> raise End_of_input
         | x :: xs -> (input := xs; x) in
       (* parallel work *)
-      run ~init ~finalize ~preserve ~core_pin ~csize ncores ~demux ~work:f ~mux:ignore
+      run ~init ~finalize ~preserve ~core_pin ~csize ncores
+        ~demux ~work:f ~mux:ignore
 
   let parfold ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
       ?(preserve = false) ?(core_pin = false) ?(csize = 1) ncores
@@ -320,7 +323,8 @@ module Parmap = struct
       let mux x =
         output := g !output x in
       (* parallel work *)
-      run ~init ~finalize ~preserve ~core_pin ~csize ncores ~demux ~work:f ~mux;
+      run ~init ~finalize ~preserve ~core_pin ~csize ncores
+        ~demux ~work:f ~mux;
       !output
 
   (* preserves array input order *)
