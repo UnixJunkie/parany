@@ -41,6 +41,10 @@ val run:
   work:('a -> 'b) ->
   mux:('b -> unit) -> unit
 
+(** A worker process (inside the ~work function) can call
+    [get_rank ()] to know its rank. Ranks are in [0:ncores-1] *)
+val get_rank: unit -> int
+
 (** Wrapper module for near-compatibility with Parmap *)
 module Parmap: sig
 

@@ -158,6 +158,12 @@ let imux (mux: 'b -> unit) =
       (* put somewhere into the pile *)
       Ht.add wait_list i res
 
+(* once initialized, my_rank will be in [0:ncores-1] *)
+let my_rank = ref (-1)
+
+let get_rank () =
+  !my_rank
+
 let run ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
     ?(preserve = false) ?(core_pin = false) ?(csize = 1) nprocs
     ~demux ~work ~mux =
@@ -174,6 +180,7 @@ let run ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
     fork_out (fun () -> feed_them_all csize nprocs demux jobs_in);
     (* start workers *)
     for worker_rank = 0 to nprocs - 1 do
+      my_rank := worker_rank;
       (* eprintf "father(%d) starting a worker\n%!" pid; *)
       fork_out (fun () ->
           init worker_rank; (* per-process optional setup *)
