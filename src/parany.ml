@@ -66,7 +66,7 @@ let feed_them_all csize ncores demux queue =
   (* let pid = Unix.getpid () in
    * eprintf "feeder(%d) started\n%!" pid; *)
   let in_count = ref 0 in
-  let prfx = Filename.temp_file "iparany_" "" in
+  let prfx = Filename.temp_file ~temp_dir:"/tmp" "iparany_" "" in
   let to_send = ref [] in
   try
     while true do
@@ -188,7 +188,7 @@ let run ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
           (* parmap also does core pinning _after_ having called
              the per-process init function *)
           if core_pin then Cpu.setcore worker_rank;
-          let prfx = Filename.temp_file "oparany_" "" in
+          let prfx = Filename.temp_file ~temp_dir:"/tmp" "oparany_" "" in
           at_exit (fun () ->
               (* tell collector to stop *)
               (* eprintf "worker(%d) finished\n%!" pid; *)
