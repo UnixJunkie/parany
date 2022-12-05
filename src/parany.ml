@@ -62,12 +62,11 @@ module Shm = struct
 end
 
 (* feeder process loop *)
-let feed_them_all csize ncores demux queue =
+let feed_them_all tmp csize ncores demux queue =
   (* let pid = Unix.getpid () in
    * eprintf "feeder(%d) started\n%!" pid; *)
   let in_count = ref 0 in
-  let temp_dir = Filename.get_temp_dir_name () in
-  let prfx = Filename.temp_file ~temp_dir "iparany_" "" in
+  let prfx = Filename.temp_file ~temp_dir:tmp "iparany_" "" in
   let to_send = ref [] in
   try
     while true do
@@ -178,7 +177,8 @@ let run ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
     (* eprintf "father(%d) starting feeder\n%!" pid; *)
     flush_all (); (* prevent duplicated I/O *)
     Gc.compact (); (* like parmap: reclaim memory prior to forking *)
-    fork_out (fun () -> feed_them_all csize nprocs demux jobs_in);
+    let tmp = Filename.get_temp_dir_name () in
+    fork_out (fun () -> feed_them_all tmp csize nprocs demux jobs_in);
     (* start workers *)
     for worker_rank = 0 to nprocs - 1 do
       my_rank := worker_rank;
@@ -189,8 +189,7 @@ let run ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
           (* parmap also does core pinning _after_ having called
              the per-process init function *)
           if core_pin then Cpu.setcore worker_rank;
-          let temp_dir = Filename.get_temp_dir_name () in
-          let prfx = Filename.temp_file ~temp_dir "oparany_" "" in
+          let prfx = Filename.temp_file ~temp_dir:tmp "oparany_" "" in
           at_exit (fun () ->
               (* tell collector to stop *)
               (* eprintf "worker(%d) finished\n%!" pid; *)
