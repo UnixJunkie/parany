@@ -8,7 +8,7 @@ dev-repo: "git+https://github.com/UnixJunkie/parany.git"
 depends: [
   "domainslib"
   "dune" {>= "1.6.0"}
-  "ocaml" {>= "4.03.0"}
+  "ocaml" {>= "5.0.0"}
 ]
 build: [
   ["dune" "build" "-p" name "-j" jobs]
