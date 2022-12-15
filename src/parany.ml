@@ -181,7 +181,10 @@ module Parmap = struct
         output := x :: !output in
       (* parallel work *)
       run ~preserve ~csize ncores ~demux ~work:f ~mux;
-      !output
+      if preserve then
+        List.rev !output
+      else
+        !output
 
   let parmapi
       ?(preserve = false) ?(csize = 1) ncores f l =
@@ -206,7 +209,10 @@ module Parmap = struct
         output := x :: !output in
       (* parallel work *)
       run ~preserve ~csize ncores ~demux ~work:f' ~mux;
-      !output
+      if preserve then
+        List.rev !output
+      else
+        !output
 
   let pariter
       ?(preserve = false) ?(csize = 1) ncores f l =
