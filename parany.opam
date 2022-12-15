@@ -29,6 +29,11 @@ The number of processors running your computation in parallel is called
 'nprocs'.
 The chunk size (number of items) processed by one call to the 'work' function
 is called 'csize'.
+
+There is a minimalist Parmap module, if you want to switch
+to/from Parmap easily.
+
+Read the corresponding ocamldoc before using.
 """
 #url {
 #  src: "https://github.com/UnixJunkie/parany/archive/vXXX.tar.gz"
