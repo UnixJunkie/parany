@@ -6,6 +6,6 @@
   (libraries domainslib))
 
 (executables
-  (names test)
-  (modules test)
+  (names test test_parmap)
+  (modules test test_parmap)
   (libraries parany))
