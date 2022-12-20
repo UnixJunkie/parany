@@ -150,7 +150,6 @@ let run ?(preserve = false) ?(csize = 1) (nprocs: int) ~demux ~work ~mux =
         Array.iter Domain.join workers
     end
 
-
 (* Wrapper for near-compatibility with Parmap *)
 module Parmap = struct
 
