@@ -25,8 +25,6 @@ provided there is a way to cut your file into independent blocks
 (the 'demux' function).
 The processing function is called 'work'.
 The function gathering the results is called 'mux'.
-The number of processors running your computation in parallel is called
-'nprocs'.
 The chunk size (number of items) processed by one call to the 'work' function
 is called 'csize'.
 
