@@ -3,9 +3,9 @@
   (name parany)
   (public_name parany)
   (modules parany)
-  (libraries unix cpu))
+  (libraries domainslib))
 
 (executables
   (names test test_parmap)
   (modules test test_parmap)
-  (libraries parany unix))
+  (libraries parany))

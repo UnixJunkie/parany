@@ -26,7 +26,6 @@ let bool_of_string = function
   | x -> failwith (sprintf "Test.bool_of_string: %s neither 0 nor 1" x)
 
 let rank = ref (-1)
-let first_time = ref true
 
 let hello i =
   rank := i;
@@ -36,11 +35,6 @@ let goodbye () =
   eprintf "Goodbye from %d\n%!" !rank
 
 let work a =
-  (* if !first_time then
-   *   begin
-   *     eprintf "My rank is %d\n%!" (Parany.get_rank ());
-   *     first_time := false
-   *   end; *)
   (* if !rank = 8 then failwith "Worker 8 on strike" else *)
   a
 
@@ -55,7 +49,7 @@ let main () =
   (* Parany.set_core_pinning true; *)
   (if preserve then
      (* we test init/finalize only with preserve *)
-     Parany.run ~init:hello ~finalize:goodbye ~preserve:true ~csize:csize nprocs ~demux ~work ~mux
+     Parany.run ~preserve:true ~csize:csize nprocs ~demux ~work ~mux
    else
      Parany.run ~csize:csize nprocs ~demux ~work ~mux);
   for i = 0 to n - 1 do
