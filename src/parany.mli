@@ -14,10 +14,10 @@ exception End_of_input
     The demux function [f] must throw [Parany.End_of_input]
     once it is done.
     Outputs of function [g] are consumed by function [h].
-    Functions [f] and [g] are run by different unix processes.
-    Function [g] is run by several processes at the same time (16
-    in this example).
-    Only function [mux] is run by the same process that called [Parany.run].
+    Functions [f] and [g] are run by different threads.
+    Function [g] is run in parallel by several threads
+    (16 in this example).
+    Only function [mux] is run by the same thread that called [Parany.run].
     [~preserve] is an optional parameter which defaults to false.
     If set to true, results will be accumulated by [h] in the same
     order that function [f] emitted them. However, for parallel performance
