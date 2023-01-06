@@ -30,6 +30,12 @@ val run:
   work:('a -> 'b) ->
   mux:('b -> unit) -> unit
 
+(** Inside of its work function, a parallel worker can call [get_rank()]
+    to know its rank. The first spawned worker thread has rank 0.
+    The second one has rank 1, etc.
+    With N parallel workers, ranks are in [0..N-1]. *)
+val get_rank: unit -> int
+
 (** Wrapper module for near-compatibility with Parmap *)
 module Parmap: sig
 

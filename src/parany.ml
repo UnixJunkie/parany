@@ -1,10 +1,16 @@
 
 module A = Array
-module Dom = Domainslib
-module Chan = Dom.Chan
+module Chan = Domainslib.Chan
 module Ht = Hashtbl
 
 exception End_of_input
+
+let id2rank = Ht.create 1
+
+(* only workers are supposed to call this *)
+let get_rank () =
+  let my_thread_id = (Domain.self () :> int) in
+  Ht.find id2rank my_thread_id
 
 let worker_loop jobs results work =
   let rec loop () =
@@ -13,9 +19,12 @@ let worker_loop jobs results work =
       (* signal muxer thread *)
       Chan.send results [||]
     | arr ->
-      let res = Array.map work arr in
-      Chan.send results res;
-      loop () in
+      begin
+        let res = Array.map work arr in
+        Chan.send results res;
+        loop ()
+      end
+  in
   loop ()
 
 let demuxer_loop nprocs jobs csize demux =
@@ -113,13 +122,16 @@ let run ?(preserve = false) ?(csize = 1) (nprocs: int) ~demux ~work ~mux =
         let results = Chan.make_bounded (50 * nprocs) in
         (* launch the workers *)
         let workers =
-          Array.init nprocs (fun _rank ->
-              Domain.spawn (fun _ ->
+          Array.init nprocs (fun rank ->
+              Domain.spawn (fun () ->
+                  let my_thread_id = (Domain.self () :> int) in
+                  Ht.add id2rank my_thread_id rank;
+                  assert(rank = get_rank ()); (* extra cautious *)
                   worker_loop jobs results (iwork work)
                 )
             ) in
         (* launch the demuxer *)
-        let demuxer = Domain.spawn (fun _ ->
+        let demuxer = Domain.spawn (fun () ->
             demuxer_loop nprocs jobs csize (idemux demux)
           ) in
         (* use the current thread to collect results (muxer) *)
@@ -134,13 +146,16 @@ let run ?(preserve = false) ?(csize = 1) (nprocs: int) ~demux ~work ~mux =
         let results = Chan.make_bounded (50 * nprocs) in
         (* launch the workers *)
         let workers =
-          Array.init nprocs (fun _rank ->
-              Domain.spawn (fun _ ->
+          Array.init nprocs (fun rank ->
+              Domain.spawn (fun () ->
+                  let my_thread_id = (Domain.self () :> int) in
+                  Ht.add id2rank my_thread_id rank;
+                  assert(rank = get_rank ()); (* extra cautious *)
                   worker_loop jobs results work
                 )
             ) in
         (* launch the demuxer *)
-        let demuxer = Domain.spawn (fun _ ->
+        let demuxer = Domain.spawn (fun () ->
             demuxer_loop nprocs jobs csize demux
           ) in
         (* use the current thread to collect results (muxer) *)
