@@ -30,7 +30,7 @@ val run:
   work:('a -> 'b) ->
   mux:('b -> unit) -> unit
 
-(** Inside of its work function, a parallel worker can call [get_rank()]
+(** INSIDE OF ITS WORK FUNCTION, a parallel worker can call [get_rank()]
     to know its rank. The first spawned worker thread has rank 0.
     The second one has rank 1, etc.
     With N parallel workers, ranks are in [0..N-1]. *)
