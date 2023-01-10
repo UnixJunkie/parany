@@ -2,6 +2,7 @@
 (* Test the behavior of a global hashtable. Especially, test if the bindings
    are stable over time. *)
 
+(* as of 10th Jan 2023, I don't have access to CPUs w/ more than 64 cores *)
 let ht = Hashtbl.create 64
 
 let get_domain_id () =
