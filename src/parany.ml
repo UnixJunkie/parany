@@ -9,18 +9,17 @@ let id2rank =
   (* +1 because the always running initial thread has id 0 *)
   Array.make (1 + Domain.recommended_domain_count()) (-1)
 
+let get_thread_id () =
+  (Domain.self () :> int)
+
 (* only workers are supposed to call this *)
 let get_rank () =
-  let my_thread_id = (Domain.self () :> int) in
-  id2rank.(my_thread_id)
+  id2rank.(get_thread_id ())
 
 let worker_loop jobs results work =
-  (* let start_rank = get_rank () in *)
   let rec loop () =
     match Chan.recv jobs with
     | [||] ->
-      (* let end_rank = get_rank () in *)
-      (* assert(start_rank = end_rank); (\* not supposed to change *\) *)
       (* signal muxer thread *)
       Chan.send results [||]
     | arr ->
@@ -129,9 +128,7 @@ let run ?(preserve = false) ?(csize = 1) (nprocs: int) ~demux ~work ~mux =
         let workers =
           Array.init nprocs (fun rank ->
               Domain.spawn (fun () ->
-                  let my_thread_id = (Domain.self () :> int) in
-                  id2rank.(my_thread_id) <- rank;
-                  (* assert(rank = get_rank ()); (\* extra cautious *\) *)
+                  id2rank.(get_thread_id ()) <- rank;
                   worker_loop jobs results (iwork work)
                 )
             ) in
@@ -153,9 +150,7 @@ let run ?(preserve = false) ?(csize = 1) (nprocs: int) ~demux ~work ~mux =
         let workers =
           Array.init nprocs (fun rank ->
               Domain.spawn (fun () ->
-                  let my_thread_id = (Domain.self () :> int) in
-                  id2rank.(my_thread_id) <- rank;
-                  (* assert(rank = get_rank ()); (\* extra cautious *\) *)
+                  id2rank.(get_thread_id ()) <- rank;
                   worker_loop jobs results work
                 )
             ) in
