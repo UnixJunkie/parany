@@ -36,9 +36,10 @@ val run:
     With N parallel workers, ranks are in [0..N-1]. *)
 val get_rank: unit -> int
 
+(** A domain/thread private store *)
 module DLS: sig
 
-  (** a domain/thread private store *)
+  (** the type of such a store *)
   type 'a store
 
   (** [create (fun () -> zero_elt)] create an empty store.
