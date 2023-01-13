@@ -36,6 +36,27 @@ val run:
     With N parallel workers, ranks are in [0..N-1]. *)
 val get_rank: unit -> int
 
+module DLS: sig
+
+  (** a domain/thread private store *)
+  type 'a store
+
+  (** [create (fun () -> zero_elt)] create an empty store.
+      For typing reasons, you need to pass a function which
+      returns an example element if applied. *)
+  val create: (unit -> 'a) -> 'a store
+
+  (** [set store x] put [x] in the [store] for the current domain,
+      so that it can be retrieved later on. *)
+  val set: 'a store -> 'a -> unit
+
+  (** [get store] retrieve something from the [store] for the current domain.
+      @raise Not_found if the current domain/thread has not called [set]
+      previously. *)
+  val get: 'a store -> 'a
+
+end
+
 (** Wrapper module for near-compatibility with Parmap *)
 module Parmap: sig
 
