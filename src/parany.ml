@@ -6,15 +6,11 @@ module Ht = Hashtbl
 exception End_of_input
 
 let id2rank =
-  (* +1 because the always running initial thread has id 0 *)
-  Array.make (1 + Domain.recommended_domain_count()) (-1)
-
-let get_thread_id () =
-  (Domain.self () :> int)
+  DLS.create (fun () -> -1)
 
 (* only workers are supposed to call this *)
 let get_rank () =
-  id2rank.(get_thread_id ())
+  DLS.get id2rank
 
 let worker_loop jobs results work =
   let rec loop () =
@@ -128,7 +124,7 @@ let run ?(preserve = false) ?(csize = 1) (nprocs: int) ~demux ~work ~mux =
         let workers =
           Array.init nprocs (fun rank ->
               Domain.spawn (fun () ->
-                  id2rank.(get_thread_id ()) <- rank;
+                  DLS.set id2rank rank;
                   worker_loop jobs results (iwork work)
                 )
             ) in
@@ -150,7 +146,7 @@ let run ?(preserve = false) ?(csize = 1) (nprocs: int) ~demux ~work ~mux =
         let workers =
           Array.init nprocs (fun rank ->
               Domain.spawn (fun () ->
-                  id2rank.(get_thread_id ()) <- rank;
+                  DLS.set id2rank rank;
                   worker_loop jobs results work
                 )
             ) in
