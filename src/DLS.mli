@@ -7,8 +7,8 @@ type 'a store
     returns an example element if applied. *)
 val create: (unit -> 'a) -> 'a store
 
-(** [set store x] put [x] in the [store] for the current domain
-    so that it can be retrieved later. *)
+(** [set store x] put [x] in the [store] for the current domain,
+    so that it can be retrieved later on. *)
 val set: 'a store -> 'a -> unit
 
 (** [get store] retrieve something from the [store] for the current domain.
