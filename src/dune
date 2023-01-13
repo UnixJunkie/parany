@@ -2,7 +2,7 @@
 (library
   (name parany)
   (public_name parany)
-  (modules parany DLS)
+  (modules parany)
   (libraries domainslib))
 
 (executables
