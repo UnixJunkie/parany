@@ -364,6 +364,26 @@ module Parmap = struct
       ~mux:(fun (i, y) -> A.unsafe_set res i y);
     res
 
+  let array_pariter
+      ?(init = fun (_rank: int) -> ())
+      ?(finalize = fun () -> ())
+      ?(core_pin = false) ncores f a =
+    run ~init ~finalize
+      ~preserve:false
+      ~core_pin ~csize:1 ncores
+      ~demux:(
+        let n = A.length a in        
+        let in_count = ref 0 in
+        fun () ->
+          if !in_count = n then
+            raise End_of_input
+          else
+            let i = !in_count in
+            incr in_count;
+            i)
+      ~work:(fun i -> f (A.unsafe_get a i))
+      ~mux:(fun () -> ())
+  
   (* let parfold_compat
    *     ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
    *     ?(ncores: int option) ?(chunksize: int option) (f: 'a -> 'b -> 'b)

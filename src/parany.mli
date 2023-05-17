@@ -72,6 +72,10 @@ module Parmap: sig
   val array_parmap: ?init:(int -> unit) -> ?finalize:(unit -> unit) ->
     ?core_pin:bool -> int -> ('a -> 'b) -> 'b -> 'a array -> 'b array
 
+  (** Parallel Array.iter *)
+  val array_pariter: ?init:(int -> unit) -> ?finalize:(unit -> unit) ->
+    ?core_pin:bool -> int -> ('a -> unit) -> 'a array -> unit
+
   (* val parfold_compat: ?init:(int -> unit) -> ?finalize:(unit -> unit) ->
    *   ?ncores:int -> ?chunksize:int -> ('a -> 'b -> 'b) -> 'a list ->
    *   'b -> ('b -> 'b -> 'b) -> 'b *)
