@@ -345,12 +345,12 @@ module Parmap = struct
   let array_parmap
       ?(init = fun (_rank: int) -> ())
       ?(finalize = fun () -> ())
-      ?(core_pin = false) ncores f init_acc a =
+      ?(core_pin = false) ?(csize = 1) ncores f init_acc a =
     let n = A.length a in
     let res = A.make n init_acc in
     run ~init ~finalize
       ~preserve:false (* input-order is preserved explicitely below *)
-      ~core_pin ~csize:1 ncores
+      ~core_pin ~csize ncores
       ~demux:(
         let in_count = ref 0 in
         fun () ->
@@ -367,10 +367,10 @@ module Parmap = struct
   let array_pariter
       ?(init = fun (_rank: int) -> ())
       ?(finalize = fun () -> ())
-      ?(core_pin = false) ncores f a =
+      ?(core_pin = false) ?(csize = 1) ncores f a =
     run ~init ~finalize
       ~preserve:false
-      ~core_pin ~csize:1 ncores
+      ~core_pin ~csize ncores
       ~demux:(
         let n = A.length a in        
         let in_count = ref 0 in
@@ -382,6 +382,26 @@ module Parmap = struct
             incr in_count;
             i)
       ~work:(fun i -> f (A.unsafe_get a i))
+      ~mux:(fun () -> ())
+
+  let array_pariteri
+      ?(init = fun (_rank: int) -> ())
+      ?(finalize = fun () -> ())
+      ?(core_pin = false) ?(csize = 1) ncores f a =
+    run ~init ~finalize
+      ~preserve:false
+      ~core_pin ~csize ncores
+      ~demux:(
+        let n = A.length a in        
+        let in_count = ref 0 in
+        fun () ->
+          if !in_count = n then
+            raise End_of_input
+          else
+            let i = !in_count in
+            incr in_count;
+            i)
+      ~work:(fun i -> f i (A.unsafe_get a i))
       ~mux:(fun () -> ())
   
   (* let parfold_compat

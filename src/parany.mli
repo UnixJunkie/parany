@@ -70,11 +70,15 @@ module Parmap: sig
 
   (** Parallel Array.map; array input order is always preserved. *)
   val array_parmap: ?init:(int -> unit) -> ?finalize:(unit -> unit) ->
-    ?core_pin:bool -> int -> ('a -> 'b) -> 'b -> 'a array -> 'b array
+    ?core_pin:bool -> ?csize:int -> int -> ('a -> 'b) -> 'b -> 'a array -> 'b array
 
   (** Parallel Array.iter *)
   val array_pariter: ?init:(int -> unit) -> ?finalize:(unit -> unit) ->
-    ?core_pin:bool -> int -> ('a -> unit) -> 'a array -> unit
+    ?core_pin:bool -> ?csize:int -> int -> ('a -> unit) -> 'a array -> unit
+
+  (** Parallel Array.iteri *)
+  val array_pariteri: ?init:(int -> unit) -> ?finalize:(unit -> unit) ->
+    ?core_pin:bool  -> ?csize:int -> int -> (int -> 'a -> unit) -> 'a array -> unit
 
   (* val parfold_compat: ?init:(int -> unit) -> ?finalize:(unit -> unit) ->
    *   ?ncores:int -> ?chunksize:int -> ('a -> 'b -> 'b) -> 'a list ->
