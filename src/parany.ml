@@ -189,7 +189,7 @@ let run ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
           (* parmap also does core pinning _after_ having called
              the per-process init function *)
           if core_pin then Cpu.setcore worker_rank;
-          let prfx = Filename.temp_file ~temp_dir:tmp "oparany_" "" in
+          let prfx = Filename.temp_file ~temp_dir:tmp (sprintf "oparany%d_" worker_rank) "" in
           at_exit (fun () ->
               (* tell collector to stop *)
               (* eprintf "worker(%d) finished\n%!" pid; *)
@@ -372,7 +372,7 @@ module Parmap = struct
       ~preserve:false
       ~core_pin ~csize ncores
       ~demux:(
-        let n = A.length a in        
+        let n = A.length a in
         let in_count = ref 0 in
         fun () ->
           if !in_count = n then
@@ -392,7 +392,7 @@ module Parmap = struct
       ~preserve:false
       ~core_pin ~csize ncores
       ~demux:(
-        let n = A.length a in        
+        let n = A.length a in
         let in_count = ref 0 in
         fun () ->
           if !in_count = n then
@@ -403,7 +403,7 @@ module Parmap = struct
             i)
       ~work:(fun i -> f i (A.unsafe_get a i))
       ~mux:(fun () -> ())
-  
+
   (* let parfold_compat
    *     ?(init = fun (_rank: int) -> ()) ?(finalize = fun () -> ())
    *     ?(ncores: int option) ?(chunksize: int option) (f: 'a -> 'b -> 'b)
